@@ -1,0 +1,1688 @@
+<!doctype html>
+<html lang="ko">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Rosota Copilot</title>
+	<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+	<style>
+		* {
+			margin: 0;
+			padding: 0;
+			box-sizing: border-box;
+		}
+
+		/* Light Theme (Default) */
+		:root {
+			--bg-primary: #ffffff;
+			--bg-secondary: #f8f9fa;
+			--bg-card: #ffffff;
+			--bg-sidebar: #f5f6f8;
+			--accent: #3b82f6;
+			--accent-hover: #2563eb;
+			--success: #10b981;
+			--warning: #f59e0b;
+			--error: #ef4444;
+			--text-primary: #6b7280;
+			--text-secondary: #9ca3af;
+			--border: #e5e7eb;
+			--shadow: rgba(0, 0, 0, 0.05);
+			--shadow-hover: rgba(0, 0, 0, 0.1);
+		}
+
+		/* Dark Theme */
+		[data-theme="dark"] {
+			--bg-primary: #0a0e27;
+			--bg-secondary: #141b2d;
+			--bg-card: #1a2332;
+			--bg-sidebar: #0f1419;
+			--accent: #3b82f6;
+			--accent-hover: #2563eb;
+			--success: #10b981;
+			--warning: #f59e0b;
+			--error: #ef4444;
+			--text-primary: #e2e8f0;
+			--text-secondary: #94a3b8;
+			--border: #2d3748;
+			--shadow: rgba(0, 0, 0, 0.3);
+			--shadow-hover: rgba(0, 0, 0, 0.5);
+		}
+
+		body {
+			font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+			background: var(--bg-primary);
+			color: var(--text-primary);
+			line-height: 1.6;
+			min-height: 100vh;
+			display: flex;
+		}
+
+		/* Sidebar */
+		.sidebar {
+			width: 260px;
+			background: var(--bg-sidebar);
+			border-right: 1px solid var(--border);
+			display: flex;
+			flex-direction: column;
+			position: fixed;
+			height: 100vh;
+			overflow-y: auto;
+			box-shadow: 2px 0 8px var(--shadow);
+		}
+
+		.sidebar-header {
+			padding: 24px 20px;
+			border-bottom: 1px solid var(--border);
+		}
+
+		.sidebar-header h1 {
+			font-size: 22px;
+			font-weight: 700;
+			color: var(--text-primary);
+		}
+
+		.sidebar-menu {
+			flex: 1;
+			padding: 16px 0;
+		}
+
+		.menu-item {
+			display: flex;
+			align-items: center;
+			padding: 12px 20px;
+			cursor: pointer;
+			transition: all 0.2s;
+			border-left: 3px solid transparent;
+			color: var(--text-secondary);
+		}
+
+		.menu-item:hover {
+			background: var(--bg-secondary);
+			color: var(--text-primary);
+		}
+
+		.menu-item.active {
+			background: var(--bg-secondary);
+			border-left-color: var(--accent);
+			color: var(--accent);
+		}
+
+		.menu-item-icon {
+			width: 20px;
+			margin-right: 12px;
+			text-align: center;
+		}
+
+		.status-indicator {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			padding: 12px 20px;
+			border-top: 1px solid var(--border);
+		}
+
+		.status-dot {
+			width: 10px;
+			height: 10px;
+			border-radius: 50%;
+			background: var(--text-secondary);
+			animation: pulse 2s infinite;
+		}
+
+		.status-dot.connected {
+			background: var(--success);
+		}
+
+		.status-dot.error {
+			background: var(--error);
+		}
+
+		@keyframes pulse {
+			0%, 100% { opacity: 1; }
+			50% { opacity: 0.5; }
+		}
+
+		/* Main Content */
+		.main-content {
+			flex: 1;
+			margin-left: 260px;
+			margin-right: 400px; /* 로그 패널 공간 확보 */
+			padding: 24px;
+		}
+
+		.content-section {
+			display: none;
+		}
+
+		.content-section.active {
+			display: block;
+		}
+
+		.section-header {
+			margin-bottom: 24px;
+		}
+
+		.section-header h2 {
+			font-size: 24px;
+			font-weight: 600;
+			margin-bottom: 8px;
+		}
+
+		.section-header p {
+			color: var(--text-secondary);
+			font-size: 14px;
+		}
+
+		.grid {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+			gap: 24px;
+			margin-bottom: 24px;
+		}
+
+		.card {
+			background: var(--bg-card);
+			border: 1px solid var(--border);
+			border-radius: 12px;
+			padding: 24px;
+			transition: all 0.2s;
+			box-shadow: 0 2px 8px var(--shadow);
+		}
+
+		.card:hover {
+			border-color: var(--accent);
+			box-shadow: 0 4px 16px var(--shadow-hover);
+			transform: translateY(-2px);
+		}
+
+		.card-title {
+			font-size: 18px;
+			font-weight: 600;
+			margin-bottom: 16px;
+			color: var(--text-primary);
+		}
+
+		.btn {
+			padding: 10px 20px;
+			border: none;
+			border-radius: 8px;
+			font-size: 14px;
+			font-weight: 500;
+			cursor: pointer;
+			transition: all 0.2s;
+			background: var(--accent);
+			color: white;
+			box-shadow: 0 2px 4px var(--shadow);
+		}
+
+		.btn:hover {
+			background: var(--accent-hover);
+			transform: translateY(-1px);
+			box-shadow: 0 4px 8px var(--shadow-hover);
+		}
+
+		.btn:active {
+			transform: translateY(0);
+		}
+
+		.btn:disabled {
+			opacity: 0.5;
+			cursor: not-allowed;
+		}
+
+		.btn-secondary {
+			background: var(--bg-secondary);
+			border: 1px solid var(--border);
+			color: var(--text-primary);
+			box-shadow: 0 1px 2px var(--shadow);
+		}
+
+		.btn-secondary:hover:not(:disabled) {
+			background: var(--bg-primary);
+			border-color: var(--accent);
+			box-shadow: 0 2px 4px var(--shadow-hover);
+		}
+
+		.btn-danger {
+			background: var(--error);
+		}
+
+		.btn-danger:hover {
+			background: #dc2626;
+		}
+
+		.btn-group {
+			display: flex;
+			gap: 12px;
+			flex-wrap: wrap;
+		}
+
+		.control-mode {
+			display: inline-block;
+			padding: 6px 12px;
+			border-radius: 6px;
+			background: var(--bg-secondary);
+			font-size: 12px;
+			font-weight: 600;
+			text-transform: uppercase;
+			color: var(--accent);
+			margin-left: 12px;
+		}
+
+		.keyboard-hints {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+			gap: 12px;
+			margin-top: 16px;
+		}
+
+		.key-hint {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			padding: 8px 12px;
+			background: var(--bg-secondary);
+			border-radius: 6px;
+			font-size: 13px;
+		}
+
+		.key {
+			display: inline-block;
+			padding: 4px 8px;
+			background: var(--bg-primary);
+			border: 1px solid var(--border);
+			border-radius: 4px;
+			font-family: 'Courier New', monospace;
+			font-size: 12px;
+			font-weight: 600;
+			min-width: 28px;
+			text-align: center;
+		}
+
+		.joint-display {
+			display: grid;
+			gap: 8px;
+			margin-top: 16px;
+		}
+
+		.joint-item {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			padding: 8px 12px;
+			background: var(--bg-secondary);
+			border-radius: 6px;
+			font-size: 13px;
+		}
+
+		.joint-value {
+			font-family: 'Courier New', monospace;
+			color: var(--accent);
+			font-weight: 600;
+		}
+
+		/* 로그 패널 (오른쪽 고정) */
+		.logs-panel {
+			position: fixed;
+			right: 0;
+			top: 0;
+			width: 400px;
+			height: 100vh;
+			background: var(--bg-sidebar);
+			border-left: 1px solid var(--border);
+			display: flex;
+			flex-direction: column;
+			z-index: 50;
+			box-shadow: -2px 0 8px var(--shadow);
+		}
+
+		.logs-panel-header {
+			padding: 16px 20px;
+			border-bottom: 1px solid var(--border);
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+		}
+
+		.logs-panel-header h3 {
+			font-size: 16px;
+			font-weight: 600;
+			color: var(--text-primary);
+		}
+
+		.logs-panel-controls {
+			display: flex;
+			gap: 8px;
+		}
+
+		.logs-panel-controls button {
+			padding: 4px 8px;
+			background: var(--bg-secondary);
+			border: 1px solid var(--border);
+			border-radius: 4px;
+			color: var(--text-secondary);
+			font-size: 11px;
+			cursor: pointer;
+			transition: all 0.2s;
+		}
+
+		.logs-panel-controls button:hover {
+			background: var(--bg-primary);
+			color: var(--text-primary);
+			border-color: var(--accent);
+		}
+
+		.logs {
+			flex: 1;
+			overflow-y: auto;
+			background: var(--bg-primary);
+			padding: 12px;
+			font-family: 'Courier New', monospace;
+			font-size: 12px;
+			line-height: 1.8;
+			scroll-behavior: smooth;
+		}
+
+		/* 온보딩 튜토리얼 모달 */
+		.tutorial-modal {
+			position: fixed;
+			top: 0;
+			left: 0;
+			right: 0;
+			bottom: 0;
+			z-index: 1000;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+		}
+
+		.tutorial-overlay {
+			position: absolute;
+			top: 0;
+			left: 0;
+			right: 0;
+			bottom: 0;
+			background: rgba(0, 0, 0, 0.8);
+			backdrop-filter: blur(4px);
+		}
+
+		.tutorial-content {
+			position: relative;
+			background: var(--bg-card);
+			border: 1px solid var(--border);
+			border-radius: 16px;
+			width: 90%;
+			max-width: 700px;
+			max-height: 90vh;
+			display: flex;
+			flex-direction: column;
+			box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+			z-index: 1001;
+		}
+
+		.tutorial-header {
+			padding: 24px 28px;
+			border-bottom: 1px solid var(--border);
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+		}
+
+		.tutorial-header h2 {
+			font-size: 24px;
+			font-weight: 700;
+			color: var(--text-primary);
+		}
+
+		.tutorial-close {
+			width: 32px;
+			height: 32px;
+			border: none;
+			background: var(--bg-secondary);
+			border-radius: 50%;
+			color: var(--text-secondary);
+			font-size: 24px;
+			cursor: pointer;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			transition: all 0.2s;
+		}
+
+		.tutorial-close:hover {
+			background: var(--bg-primary);
+			color: var(--text-primary);
+		}
+
+		.tutorial-body {
+			flex: 1;
+			overflow-y: auto;
+			padding: 28px;
+		}
+
+		.tutorial-step {
+			display: flex;
+			gap: 24px;
+		}
+
+		.tutorial-step-number {
+			width: 48px;
+			height: 48px;
+			border-radius: 50%;
+			background: var(--accent);
+			color: white;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			font-size: 24px;
+			font-weight: 700;
+			flex-shrink: 0;
+		}
+
+		.tutorial-step-content {
+			flex: 1;
+		}
+
+		.tutorial-step-content h3 {
+			font-size: 20px;
+			font-weight: 600;
+			margin-bottom: 12px;
+			color: var(--text-primary);
+		}
+
+		.tutorial-step-content p {
+			color: var(--text-secondary);
+			margin-bottom: 16px;
+			line-height: 1.6;
+		}
+
+		.tutorial-step-content ul {
+			list-style: none;
+			padding: 0;
+			margin: 0 0 20px 0;
+		}
+
+		.tutorial-step-content ul li {
+			padding: 8px 0;
+			padding-left: 24px;
+			position: relative;
+			color: var(--text-secondary);
+		}
+
+		.tutorial-step-content ul li::before {
+			content: "✓";
+			position: absolute;
+			left: 0;
+			color: var(--success);
+			font-weight: 600;
+		}
+
+		.tutorial-highlight {
+			padding: 12px 16px;
+			background: var(--bg-secondary);
+			border-left: 3px solid var(--accent);
+			border-radius: 6px;
+			margin-top: 16px;
+			font-size: 14px;
+			line-height: 1.6;
+		}
+
+		.tutorial-keyboard-guide {
+			margin-top: 20px;
+		}
+
+		.keyboard-mode {
+			margin-bottom: 24px;
+		}
+
+		.keyboard-mode h4 {
+			font-size: 16px;
+			font-weight: 600;
+			margin-bottom: 12px;
+			color: var(--text-primary);
+		}
+
+		.keyboard-grid {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+			gap: 12px;
+		}
+
+		.key-item {
+			display: flex;
+			align-items: center;
+			gap: 12px;
+			padding: 10px 14px;
+			background: var(--bg-secondary);
+			border-radius: 8px;
+			font-size: 14px;
+		}
+
+		.key-item kbd {
+			display: inline-block;
+			padding: 4px 10px;
+			background: var(--bg-primary);
+			border: 1px solid var(--border);
+			border-radius: 4px;
+			font-family: 'Courier New', monospace;
+			font-size: 13px;
+			font-weight: 600;
+			min-width: 32px;
+			text-align: center;
+			color: var(--accent);
+		}
+
+		.key-item span {
+			color: var(--text-secondary);
+		}
+
+		.tutorial-footer {
+			padding: 20px 28px;
+			border-top: 1px solid var(--border);
+			display: flex;
+			flex-direction: column;
+			gap: 16px;
+		}
+
+		.tutorial-progress {
+			display: flex;
+			align-items: center;
+			gap: 12px;
+		}
+
+		.tutorial-progress-bar {
+			flex: 1;
+			height: 6px;
+			background: var(--bg-secondary);
+			border-radius: 3px;
+			overflow: hidden;
+		}
+
+		.tutorial-progress-fill {
+			height: 100%;
+			background: var(--accent);
+			border-radius: 3px;
+			transition: width 0.3s ease;
+			width: 33.33%;
+		}
+
+		#tutorial-step-indicator {
+			font-size: 13px;
+			color: var(--text-secondary);
+			font-weight: 600;
+			min-width: 50px;
+		}
+
+		.tutorial-actions {
+			display: flex;
+			justify-content: flex-end;
+			gap: 12px;
+		}
+
+		/* 튜토리얼 페이지 스타일 */
+		.tutorial-page-container {
+			display: flex;
+			flex-direction: column;
+			min-height: 500px;
+		}
+
+		.tutorial-page {
+			display: flex;
+			gap: 24px;
+			flex: 1;
+			padding: 40px 0;
+		}
+
+		.tutorial-navigation {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			padding: 24px 0;
+			border-top: 1px solid var(--border);
+			margin-top: 40px;
+		}
+
+		.tutorial-indicators {
+			display: flex;
+			gap: 12px;
+			align-items: center;
+		}
+
+		.tutorial-dot {
+			width: 12px;
+			height: 12px;
+			border-radius: 50%;
+			background: var(--bg-secondary);
+			border: 2px solid var(--border);
+			cursor: pointer;
+			transition: all 0.3s ease;
+		}
+
+		.tutorial-dot.active {
+			background: var(--accent);
+			border-color: var(--accent);
+			transform: scale(1.2);
+		}
+
+		.tutorial-dot:hover {
+			transform: scale(1.1);
+		}
+
+		/* 키보드 단축키 가이드 모달 */
+		.shortcuts-modal {
+			position: fixed;
+			top: 0;
+			left: 0;
+			right: 0;
+			bottom: 0;
+			z-index: 1000;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+		}
+
+		.shortcuts-overlay {
+			position: absolute;
+			top: 0;
+			left: 0;
+			right: 0;
+			bottom: 0;
+			background: rgba(0, 0, 0, 0.8);
+			backdrop-filter: blur(4px);
+		}
+
+		.shortcuts-content {
+			position: relative;
+			background: var(--bg-card);
+			border: 1px solid var(--border);
+			border-radius: 16px;
+			width: 90%;
+			max-width: 800px;
+			max-height: 90vh;
+			display: flex;
+			flex-direction: column;
+			box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+			z-index: 1001;
+		}
+
+		.shortcuts-header {
+			padding: 24px 28px;
+			border-bottom: 1px solid var(--border);
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+		}
+
+		.shortcuts-header h2 {
+			font-size: 24px;
+			font-weight: 700;
+			color: var(--text-primary);
+		}
+
+		.shortcuts-close {
+			width: 32px;
+			height: 32px;
+			border: none;
+			background: var(--bg-secondary);
+			border-radius: 50%;
+			color: var(--text-secondary);
+			font-size: 24px;
+			cursor: pointer;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			transition: all 0.2s;
+		}
+
+		.shortcuts-close:hover {
+			background: var(--bg-primary);
+			color: var(--text-primary);
+		}
+
+		.shortcuts-body {
+			flex: 1;
+			overflow-y: auto;
+			padding: 28px;
+		}
+
+		.shortcuts-section {
+			margin-bottom: 32px;
+		}
+
+		.shortcuts-section:last-child {
+			margin-bottom: 0;
+		}
+
+		.shortcuts-section h3 {
+			font-size: 18px;
+			font-weight: 600;
+			margin-bottom: 16px;
+			color: var(--text-primary);
+			padding-bottom: 12px;
+			border-bottom: 1px solid var(--border);
+		}
+
+		.shortcuts-grid {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+			gap: 12px;
+		}
+
+		.shortcut-item {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			padding: 12px 16px;
+			background: var(--bg-secondary);
+			border-radius: 8px;
+			gap: 16px;
+		}
+
+		.shortcut-keys {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+		}
+
+		.shortcut-keys kbd {
+			display: inline-block;
+			padding: 6px 12px;
+			background: var(--bg-primary);
+			border: 1px solid var(--border);
+			border-radius: 6px;
+			font-family: 'Courier New', monospace;
+			font-size: 13px;
+			font-weight: 600;
+			min-width: 36px;
+			text-align: center;
+			color: var(--accent);
+		}
+
+		.shortcut-desc {
+			flex: 1;
+			text-align: right;
+			color: var(--text-secondary);
+			font-size: 14px;
+		}
+
+		.log-entry {
+			margin-bottom: 4px;
+			padding: 2px 4px;
+			border-radius: 3px;
+			word-wrap: break-word;
+			animation: fadeIn 0.2s ease-in;
+		}
+
+		@keyframes fadeIn {
+			from { opacity: 0; transform: translateY(-5px); }
+			to { opacity: 1; transform: translateY(0); }
+		}
+
+		.log-entry.info { 
+			color: #60a5fa; 
+			background: rgba(96, 165, 250, 0.1);
+		}
+		.log-entry.success { 
+			color: var(--success); 
+			background: rgba(34, 197, 94, 0.1);
+		}
+		.log-entry.warning { 
+			color: var(--warning); 
+			background: rgba(251, 191, 36, 0.1);
+		}
+		.log-entry.error { 
+			color: var(--error); 
+			background: rgba(239, 68, 68, 0.1);
+		}
+
+		.connection-settings {
+			display: flex;
+			gap: 12px;
+			margin-top: 12px;
+			flex-wrap: wrap;
+		}
+
+		.input-group {
+			display: flex;
+			flex-direction: column;
+			gap: 6px;
+		}
+
+		.input-group label {
+			font-size: 12px;
+			color: var(--text-secondary);
+		}
+
+		.input-group input, .input-group select {
+			padding: 8px 12px;
+			background: var(--bg-secondary);
+			border: 1px solid var(--border);
+			border-radius: 6px;
+			color: var(--text-primary);
+			font-size: 14px;
+		}
+
+		.input-group input:focus, .input-group select:focus {
+			outline: none;
+			border-color: var(--accent);
+		}
+
+		.full-width {
+			grid-column: 1 / -1;
+		}
+
+		.estop-btn {
+			width: 100%;
+			padding: 16px;
+			font-size: 18px;
+			font-weight: 700;
+			background: var(--error);
+			border: 2px solid #dc2626;
+		}
+
+		.estop-btn:active {
+			background: #991b1b;
+		}
+
+		.top-status-bar {
+			position: fixed;
+			top: 0;
+			right: 400px; /* 로그 패널 공간 확보 */
+			left: 260px;
+			background: var(--bg-sidebar);
+			border-bottom: 1px solid var(--border);
+			padding: 12px 24px;
+			display: flex;
+			justify-content: flex-end;
+			align-items: center;
+			gap: 16px;
+			z-index: 100;
+			box-shadow: 0 2px 4px var(--shadow);
+		}
+
+		/* Theme Toggle */
+		.theme-toggle {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			padding: 6px 12px;
+			background: var(--bg-card);
+			border: 1px solid var(--border);
+			border-radius: 8px;
+			cursor: pointer;
+			transition: all 0.2s;
+			font-size: 13px;
+			color: var(--text-primary);
+			position: relative;
+			z-index: 101;
+			pointer-events: auto !important;
+		}
+		
+		.theme-toggle > * {
+			pointer-events: none;
+		}
+		
+		.theme-toggle:active {
+			transform: scale(0.98);
+		}
+
+		.theme-toggle:hover {
+			background: var(--bg-secondary);
+			border-color: var(--accent);
+			box-shadow: 0 2px 8px var(--shadow-hover);
+		}
+
+		.theme-toggle-icon {
+			font-size: 16px;
+		}
+
+		.theme-menu {
+			position: relative;
+			z-index: 101;
+		}
+
+		.theme-dropdown {
+			position: absolute;
+			top: calc(100% + 8px);
+			right: 0;
+			background: var(--bg-card);
+			border: 1px solid var(--border);
+			border-radius: 8px;
+			box-shadow: 0 4px 12px var(--shadow-hover);
+			min-width: 140px;
+			overflow: hidden;
+			display: none;
+			z-index: 1000;
+		}
+
+		.theme-dropdown.show {
+			display: block;
+		}
+
+		.theme-option {
+			padding: 10px 16px;
+			cursor: pointer;
+			transition: all 0.2s;
+			color: var(--text-primary);
+			font-size: 13px;
+			display: flex;
+			align-items: center;
+			gap: 10px;
+		}
+
+		.theme-option:hover {
+			background: var(--bg-secondary);
+		}
+
+		.theme-option.active {
+			background: var(--bg-secondary);
+			color: var(--accent);
+			font-weight: 600;
+		}
+
+		.theme-option-icon {
+			width: 16px;
+			text-align: center;
+		}
+
+		/* Language Toggle */
+		.language-menu {
+			position: relative;
+			z-index: 101;
+		}
+
+		.language-toggle {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			padding: 6px 12px;
+			background: var(--bg-card);
+			border: 1px solid var(--border);
+			border-radius: 8px;
+			cursor: pointer;
+			transition: all 0.2s;
+			font-size: 13px;
+			color: var(--text-primary);
+			position: relative;
+			z-index: 101;
+			pointer-events: auto !important;
+		}
+		
+		.language-toggle > * {
+			pointer-events: none;
+		}
+		
+		.language-toggle:active {
+			transform: scale(0.98);
+		}
+
+		.language-toggle:hover {
+			background: var(--bg-secondary);
+			border-color: var(--accent);
+			box-shadow: 0 2px 8px var(--shadow-hover);
+		}
+
+		.language-toggle-icon {
+			font-size: 16px;
+		}
+
+		.language-dropdown {
+			position: absolute;
+			top: calc(100% + 8px);
+			right: 0;
+			background: var(--bg-card);
+			border: 1px solid var(--border);
+			border-radius: 8px;
+			box-shadow: 0 4px 12px var(--shadow-hover);
+			min-width: 120px;
+			overflow: hidden;
+			display: none;
+			z-index: 1000;
+		}
+
+		.language-dropdown.show {
+			display: block;
+		}
+
+		.language-option {
+			padding: 10px 16px;
+			cursor: pointer;
+			transition: all 0.2s;
+			color: var(--text-primary);
+			font-size: 13px;
+			display: flex;
+			align-items: center;
+			gap: 10px;
+		}
+
+		.language-option:hover {
+			background: var(--bg-secondary);
+		}
+
+		.language-option.active {
+			background: var(--bg-secondary);
+			color: var(--accent);
+			font-weight: 600;
+		}
+
+		.language-option-icon {
+			width: 20px;
+			text-align: center;
+		}
+
+		.top-status-info {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			font-size: 13px;
+		}
+
+		.top-status-label {
+			color: var(--text-secondary);
+		}
+
+		.top-status-value {
+			font-weight: 600;
+		}
+
+		.top-status-value.connected {
+			color: var(--success);
+		}
+
+		.top-status-value.disconnected {
+			color: var(--text-secondary);
+		}
+
+		.main-content {
+			padding-top: 60px;
+		}
+	</style>
+</head>
+<body>
+	<!-- Top Status Bar -->
+	<div class="top-status-bar">
+		<div class="top-status-info">
+			<span class="top-status-label" data-i18n="label.robot_status">Robot Status:</span>
+			<span class="status-dot" id="top-status-dot"></span>
+			<span class="top-status-value disconnected" id="top-status-text" data-i18n="status.disconnected">Disconnected</span>
+		</div>
+		<div class="top-status-info" id="top-connection-info" style="display: none;">
+			<span class="top-status-label" data-i18n="label.port">Port:</span>
+			<span class="top-status-value" id="top-port">-</span>
+		</div>
+		<div class="top-status-info" id="top-baudrate-info" style="display: none;">
+			<span class="top-status-label" data-i18n="label.baudrate">Baudrate:</span>
+			<span class="top-status-value" id="top-baudrate">-</span>
+		</div>
+		<div class="language-menu">
+			<button class="language-toggle" id="language-toggle-btn" type="button" onclick="window.toggleLanguageDropdown && window.toggleLanguageDropdown(event)">
+				<span class="language-toggle-icon" id="language-icon">🇰🇷</span>
+				<span id="language-text">Kor</span>
+			</button>
+			<div class="language-dropdown" id="language-dropdown">
+				<div class="language-option" data-lang="ko">
+					<span class="language-option-icon">🇰🇷</span>
+					<span>한국어</span>
+				</div>
+				<div class="language-option" data-lang="en">
+					<span class="language-option-icon">🇺🇸</span>
+					<span>English</span>
+				</div>
+			</div>
+		</div>
+		<div class="theme-menu">
+			<button class="theme-toggle" id="theme-toggle-btn" type="button" onclick="window.toggleThemeDropdown && window.toggleThemeDropdown(event)">
+				<span class="theme-toggle-icon" id="theme-icon">☀️</span>
+				<span id="theme-text">Light</span>
+			</button>
+			<div class="theme-dropdown" id="theme-dropdown">
+				<div class="theme-option" data-theme="light">
+					<span class="theme-option-icon">☀️</span>
+					<span>Light</span>
+				</div>
+				<div class="theme-option" data-theme="dark">
+					<span class="theme-option-icon">🌙</span>
+					<span>Dark</span>
+				</div>
+				<div class="theme-option" data-theme="system">
+					<span class="theme-option-icon">💻</span>
+					<span>System</span>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- Sidebar -->
+	<div class="sidebar">
+		<div class="sidebar-header">
+			<h1>Rosota Copilot</h1>
+		</div>
+		<div class="sidebar-menu">
+			<div class="menu-item" data-section="tutorial">
+				<span class="menu-item-icon">📚</span>
+				<span data-i18n="menu.tutorial">Tutorial</span>
+			</div>
+			<div class="menu-item active" data-section="connection">
+				<span class="menu-item-icon">🔌</span>
+				<span data-i18n="menu.connection">Connection</span>
+			</div>
+			<div class="menu-item" data-section="calibration">
+				<span class="menu-item-icon">🎯</span>
+				<span data-i18n="menu.calibration">Calibration</span>
+			</div>
+			<div class="menu-item" data-section="control">
+				<span class="menu-item-icon">⌨️</span>
+				<span data-i18n="menu.control">Control</span>
+			</div>
+			<div class="menu-item" data-section="status">
+				<span class="menu-item-icon">📊</span>
+				<span data-i18n="menu.status">Status</span>
+			</div>
+		</div>
+		<div class="status-indicator">
+			<span class="status-dot" id="status-dot"></span>
+			<span id="status-text" style="font-size: 12px;" data-i18n="status.disconnected">Disconnected</span>
+		</div>
+	</div>
+
+	<!-- Main Content -->
+	<div class="main-content">
+		<!-- Tutorial Section -->
+		<div class="content-section" id="section-tutorial">
+			<div class="section-header">
+				<h2 data-i18n="section.tutorial.title">Tutorial</h2>
+				<p data-i18n="section.tutorial.description">SO Arm 100/101 Quick Start Guide</p>
+			</div>
+			<div class="tutorial-page-container">
+				<div class="tutorial-page" id="tutorial-page-1">
+					<div class="tutorial-step-number">1</div>
+					<div class="tutorial-step-content">
+						<h3>로봇 연결</h3>
+						<p>USB 케이블로 로봇을 컴퓨터에 연결하세요.</p>
+						<ul>
+							<li>로봇 전원이 켜져 있는지 확인</li>
+							<li>USB 케이블이 제대로 연결되었는지 확인</li>
+							<li>연결 섹션에서 "Auto-detect" 옵션을 선택하면 자동으로 로봇을 감지합니다</li>
+							<li>"Connect" 버튼을 클릭하여 로봇에 연결합니다</li>
+						</ul>
+					</div>
+				</div>
+				<div class="tutorial-page" id="tutorial-page-2" style="display: none;">
+					<div class="tutorial-step-number">2</div>
+					<div class="tutorial-step-content">
+						<h3>캘리브레이션</h3>
+						<p>로봇을 정확하게 제어하기 위해 캘리브레이션이 필요합니다.</p>
+						<ul>
+							<li>"Calibration" 섹션으로 이동</li>
+							<li>"📋 Open Calibration Wizard" 버튼 클릭</li>
+							<li>마법사의 단계를 따라 캘리브레이션을 완료하세요</li>
+							<li>각 단계에서 로봇이 올바른 위치에 있는지 확인하세요</li>
+						</ul>
+					</div>
+				</div>
+				<div class="tutorial-page" id="tutorial-page-3" style="display: none;">
+					<div class="tutorial-step-content">
+						<h3>키보드 제어</h3>
+						<p>키보드로 로봇을 제어할 수 있습니다.</p>
+						<div class="tutorial-keyboard-guide">
+							<div class="keyboard-mode">
+								<h4>Joint Mode (조인트 모드)</h4>
+								<ul>
+									<li><strong>I/K</strong>: 조인트 1 ±</li>
+									<li><strong>J/L</strong>: 조인트 2 ±</li>
+									<li><strong>U/O</strong>: 조인트 3 ±</li>
+									<li><strong>7/9</strong>: 조인트 4 ±</li>
+									<li><strong>8/0</strong>: 조인트 5 ±</li>
+									<li><strong>Y/H</strong>: 조인트 6 ±</li>
+								</ul>
+							</div>
+							<div class="keyboard-mode">
+								<h4>Cartesian Mode (직교좌표 모드)</h4>
+								<ul>
+									<li><strong>W/S</strong>: X ±</li>
+									<li><strong>A/D</strong>: Y ±</li>
+									<li><strong>Q/E</strong>: Z ±</li>
+									<li><strong>R/F</strong>: Roll ±</li>
+									<li><strong>T/G</strong>: Pitch ±</li>
+									<li><strong>Z/X</strong>: Yaw ±</li>
+								</ul>
+							</div>
+							<div class="keyboard-mode">
+								<h4>공통</h4>
+								<ul>
+									<li><strong>M</strong>: 모드 전환</li>
+									<li><strong>+/-</strong>: 속도 조절</li>
+									<li><strong>Space</strong>: 긴급 정지</li>
+								</ul>
+							</div>
+						</div>
+					</div>
+				</div>
+				<div class="tutorial-navigation">
+					<button class="btn btn-secondary" id="tutorial-page-prev" style="display: none;">&lt; 이전</button>
+					<div class="tutorial-indicators">
+						<span class="tutorial-dot active" data-page="1"></span>
+						<span class="tutorial-dot" data-page="2"></span>
+						<span class="tutorial-dot" data-page="3"></span>
+					</div>
+					<button class="btn" id="tutorial-page-next">다음 &gt;</button>
+				</div>
+			</div>
+		</div>
+		
+		<!-- Connection Section -->
+		<div class="content-section active" id="section-connection">
+			<div class="section-header">
+				<h2 data-i18n="section.connection.title">Connection</h2>
+				<p data-i18n="section.connection.description">로봇 연결 설정 및 관리</p>
+			</div>
+			<div class="card">
+				<div class="card-title" data-i18n="card.connection_settings">Connection Settings</div>
+				<div class="connection-settings">
+					<div class="input-group">
+						<label data-i18n="label.connection_type">Connection Type</label>
+						<select id="conn-type">
+							<option value="serial" data-i18n="option.serial_usb">Serial (USB)</option>
+							<option value="tcp" data-i18n="option.tcp_ip">TCP/IP</option>
+						</select>
+					</div>
+					<div class="input-group" id="port-group" style="flex: 1;">
+						<label data-i18n="label.port">Port</label>
+						<div style="display: flex; gap: 8px;">
+							<select id="conn-port-select" style="flex: 1;">
+								<option value="" data-i18n="option.auto_detect">Auto-detect</option>
+							</select>
+							<button class="btn btn-secondary" id="refresh-ports-btn" style="padding: 8px 12px; white-space: nowrap;" title="Refresh" data-i18n="btn.refresh">🔄</button>
+						</div>
+					</div>
+					<div class="input-group" id="baudrate-group">
+						<label data-i18n="label.baudrate">Baudrate</label>
+						<select id="conn-baudrate">
+							<option value="115200" selected>115200</option>
+							<option value="9600">9600</option>
+							<option value="57600">57600</option>
+						</select>
+					</div>
+					<div class="input-group" id="host-group" style="display: none;">
+						<label data-i18n="label.host">Host</label>
+						<input type="text" id="conn-host" placeholder="192.168.1.100" value="192.168.1.100">
+					</div>
+				</div>
+				<div class="btn-group" style="margin-top: 16px;">
+					<button class="btn" id="connect-btn" data-i18n="btn.connect">Connect</button>
+					<button class="btn btn-secondary" id="disconnect-btn" disabled data-i18n="btn.disconnect">Disconnect</button>
+				</div>
+				<p style="margin-top: 16px; color: var(--text-secondary); font-size: 13px;" data-i18n="tip.auto_detect">
+					💡 USB 연결 시 자동으로 로봇을 감지하여 연결합니다.
+				</p>
+			</div>
+		</div>
+
+		<!-- Calibration Section -->
+		<div class="content-section" id="section-calibration">
+			<div class="section-header">
+				<h2 data-i18n="section.calibration.title">Calibration</h2>
+				<p data-i18n="section.calibration.description">로봇 캘리브레이션 및 초기 설정</p>
+			</div>
+			
+			<!-- 캘리브레이션 마법사 -->
+			<div class="card full-width" id="calibration-wizard" style="display: none;">
+				<div class="card-title" data-i18n="card.calibration_wizard">📋 Calibration Wizard</div>
+				<div id="wizard-progress" style="margin-bottom: 20px;">
+					<div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+						<span style="font-size: 14px; color: var(--text-secondary);" data-i18n="label.progress">Progress</span>
+						<span id="wizard-step-text" style="font-size: 14px; font-weight: 600;">Step 0/3</span>
+					</div>
+					<div style="height: 8px; background: var(--bg-secondary); border-radius: 4px; overflow: hidden;">
+						<div id="wizard-progress-bar" style="height: 100%; background: var(--accent); width: 0%; transition: width 0.3s;"></div>
+					</div>
+				</div>
+				<div id="wizard-instructions" style="padding: 16px; background: var(--bg-secondary); border-radius: 8px; margin-bottom: 16px; min-height: 80px;">
+					<p id="wizard-instruction-text" style="margin: 0; color: var(--text-primary); line-height: 1.8; font-size: 14px; white-space: pre-line;" data-i18n="wizard.ready">
+						Ready to start calibration. Make sure the robot is connected and powered on.
+					</p>
+				</div>
+				<div class="btn-group">
+					<button class="btn" id="wizard-start-btn" data-i18n="btn.start_calibration">▶ Start Calibration</button>
+					<button class="btn" id="wizard-next-btn" style="display: none;" data-i18n="btn.next_step">Next Step →</button>
+					<button class="btn btn-secondary" id="wizard-cancel-btn" style="display: none;" data-i18n="btn.cancel">Cancel</button>
+				</div>
+			</div>
+			
+			<!-- 기본 캘리브레이션 버튼 -->
+			<div class="card">
+				<div class="card-title" data-i18n="card.quick_actions">Quick Actions</div>
+				<p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 16px;" data-i18n="tip.quick_calibration">
+					빠른 캘리브레이션 작업을 수행합니다.
+				</p>
+				<div class="btn-group">
+					<button class="btn" id="home-btn" data-i18n="btn.home_position">Home Position</button>
+					<button class="btn" id="zero-btn" data-i18n="btn.zero_joints">Zero Joints</button>
+					<button class="btn" id="calibrate-btn" data-i18n="btn.run_calibration">Run Calibration</button>
+				</div>
+				<div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);">
+					<button class="btn btn-secondary" id="show-wizard-btn" data-i18n="btn.open_wizard">📋 Open Calibration Wizard</button>
+				</div>
+			</div>
+		</div>
+
+		<!-- Control Section -->
+		<div class="content-section" id="section-control">
+			<div class="section-header">
+				<h2 data-i18n="section.control.title">Control</h2>
+				<p data-i18n="section.control.description">키보드로 로봇 제어</p>
+			</div>
+			<div class="grid">
+				<div class="card">
+					<div class="card-title">
+						<span data-i18n="card.control_mode">Control Mode</span>
+						<span class="control-mode" id="control-mode" data-i18n="mode.joint">Joint</span>
+					</div>
+					<p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 12px;">
+						<span data-i18n="label.current_mode">현재 제어 모드:</span> <strong id="mode-text"></strong>
+					</p>
+					<div style="display: flex; gap: 8px; align-items: center;">
+						<span style="font-size: 12px; color: var(--text-secondary);" data-i18n="label.speed">Speed:</span>
+						<span id="speed-value" style="font-weight: 600; color: var(--accent);">1.0x</span>
+					</div>
+				</div>
+				<div class="card full-width">
+					<div class="card-title" data-i18n="card.keyboard_control">Keyboard Control</div>
+					<p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 16px;" data-i18n="tip.keyboard_control">
+						브라우저에 포커스를 두고 키보드로 로봇을 제어하세요.
+					</p>
+					<div class="btn-group" style="margin-bottom: 16px;">
+						<button class="btn" id="start-control-btn" data-i18n="btn.start_control">▶ Start Control</button>
+						<button class="btn btn-secondary" id="stop-control-btn" disabled data-i18n="btn.stop_control">⏹ Stop Control</button>
+					</div>
+					<div id="control-status" style="padding: 8px 12px; background: var(--bg-secondary); border-radius: 6px; margin-bottom: 16px; font-size: 13px;">
+						<span style="color: var(--text-secondary);" data-i18n="label.status">Status: </span>
+						<span id="control-status-text" style="color: var(--text-secondary);" data-i18n="status.stopped">Stopped</span>
+					</div>
+					<div class="keyboard-hints" id="keyboard-hints">
+						<!-- 키보드 힌트는 JavaScript에서 동적으로 생성 -->
+					</div>
+				</div>
+				<div class="card full-width">
+					<button class="btn estop-btn" id="estop-btn" data-i18n="btn.emergency_stop">EMERGENCY STOP</button>
+				</div>
+			</div>
+		</div>
+
+		<!-- Status Section -->
+		<div class="content-section" id="section-status">
+			<div class="section-header">
+				<h2 data-i18n="section.status.title">Robot Status</h2>
+				<p data-i18n="section.status.description">실시간 로봇 상태 모니터링</p>
+			</div>
+			<div class="card">
+				<div class="card-title" data-i18n="card.joint_positions">Joint Positions</div>
+				<div class="joint-display" id="joint-display">
+					<div class="joint-item">
+						<span>Joint 1</span>
+						<span class="joint-value" id="joint-0">0.0°</span>
+					</div>
+					<div class="joint-item">
+						<span>Joint 2</span>
+						<span class="joint-value" id="joint-1">0.0°</span>
+					</div>
+					<div class="joint-item">
+						<span>Joint 3</span>
+						<span class="joint-value" id="joint-2">0.0°</span>
+					</div>
+					<div class="joint-item">
+						<span>Joint 4</span>
+						<span class="joint-value" id="joint-3">0.0°</span>
+					</div>
+					<div class="joint-item">
+						<span>Joint 5</span>
+						<span class="joint-value" id="joint-4">0.0°</span>
+					</div>
+					<div class="joint-item">
+						<span>Joint 6</span>
+						<span class="joint-value" id="joint-5">0.0°</span>
+					</div>
+				</div>
+			</div>
+		</div>
+
+	</div>
+
+	<!-- Logs Panel (오른쪽 고정) -->
+	<div class="logs-panel">
+		<div class="logs-panel-header">
+			<h3 data-i18n="card.system_logs">📋 System Logs</h3>
+			<div class="logs-panel-controls">
+				<button id="clear-logs-btn" data-i18n="btn.clear" title="Clear logs">Clear</button>
+				<button id="toggle-logs-btn" data-i18n="btn.auto" title="Toggle auto-scroll">Auto</button>
+			</div>
+		</div>
+		<div class="logs" id="logs"></div>
+	</div>
+
+	<!-- Onboarding Tutorial Modal -->
+	<div class="tutorial-modal" id="tutorial-modal" style="display: none;">
+		<div class="tutorial-overlay"></div>
+		<div class="tutorial-content">
+			<div class="tutorial-header">
+				<h2>🎯 SO Arm 100/101 Quick Start Guide</h2>
+				<button class="tutorial-close" id="tutorial-close-btn">×</button>
+			</div>
+			<div class="tutorial-body">
+				<div class="tutorial-step" id="tutorial-step-1">
+					<div class="tutorial-step-number">1</div>
+					<div class="tutorial-step-content">
+						<h3>로봇 연결</h3>
+						<p>USB 케이블로 로봇을 컴퓨터에 연결하세요.</p>
+						<ul>
+							<li>로봇 전원이 켜져 있는지 확인</li>
+							<li>USB 케이블이 제대로 연결되었는지 확인</li>
+							<li>"Connection" 섹션에서 "Connect" 버튼 클릭</li>
+						</ul>
+						<div class="tutorial-highlight">
+							💡 <strong>팁</strong>: 로봇이 자동으로 감지되면 자동 연결됩니다.
+						</div>
+					</div>
+				</div>
+				<div class="tutorial-step" id="tutorial-step-2" style="display: none;">
+					<div class="tutorial-step-number">2</div>
+					<div class="tutorial-step-content">
+						<h3>캘리브레이션</h3>
+						<p>로봇을 정확하게 제어하기 위해 캘리브레이션이 필요합니다.</p>
+						<ul>
+							<li>"Calibration" 섹션으로 이동</li>
+							<li>"📋 Open Calibration Wizard" 버튼 클릭</li>
+							<li>단계별 안내를 따라 캘리브레이션 완료</li>
+						</ul>
+						<div class="tutorial-highlight">
+							⚠️ <strong>주의</strong>: 캘리브레이션 중에는 로봇을 만지지 마세요.
+						</div>
+					</div>
+				</div>
+				<div class="tutorial-step" id="tutorial-step-3" style="display: none;">
+					<div class="tutorial-step-content">
+						<h3>키보드 제어</h3>
+						<p>키보드로 로봇을 제어할 수 있습니다.</p>
+						<div class="tutorial-keyboard-guide">
+							<div class="keyboard-mode">
+								<h4>Joint Mode (조인트 모드)</h4>
+								<div class="keyboard-grid">
+									<div class="key-item"><kbd>I</kbd>/<kbd>K</kbd> <span>Joint 1</span></div>
+									<div class="key-item"><kbd>J</kbd>/<kbd>L</kbd> <span>Joint 2</span></div>
+									<div class="key-item"><kbd>U</kbd>/<kbd>O</kbd> <span>Joint 3</span></div>
+									<div class="key-item"><kbd>7</kbd>/<kbd>9</kbd> <span>Joint 4</span></div>
+									<div class="key-item"><kbd>8</kbd>/<kbd>0</kbd> <span>Joint 5</span></div>
+									<div class="key-item"><kbd>Y</kbd>/<kbd>H</kbd> <span>Joint 6</span></div>
+								</div>
+							</div>
+							<div class="keyboard-mode">
+								<h4>Cartesian Mode (직교 좌표 모드)</h4>
+								<div class="keyboard-grid">
+									<div class="key-item"><kbd>W</kbd>/<kbd>S</kbd> <span>X축</span></div>
+									<div class="key-item"><kbd>A</kbd>/<kbd>D</kbd> <span>Y축</span></div>
+									<div class="key-item"><kbd>Q</kbd>/<kbd>E</kbd> <span>Z축</span></div>
+									<div class="key-item"><kbd>R</kbd>/<kbd>F</kbd> <span>Roll</span></div>
+									<div class="key-item"><kbd>T</kbd>/<kbd>G</kbd> <span>Pitch</span></div>
+									<div class="key-item"><kbd>Z</kbd>/<kbd>X</kbd> <span>Yaw</span></div>
+								</div>
+							</div>
+							<div class="keyboard-mode">
+								<h4>공통 단축키</h4>
+								<div class="keyboard-grid">
+									<div class="key-item"><kbd>M</kbd> <span>모드 전환</span></div>
+									<div class="key-item"><kbd>+</kbd>/<kbd>-</kbd> <span>속도 조절</span></div>
+									<div class="key-item"><kbd>Space</kbd> <span>긴급 정지</span></div>
+									<div class="key-item"><kbd>C</kbd> <span>그리퍼 토글</span></div>
+								</div>
+							</div>
+						</div>
+						<div class="tutorial-highlight">
+							💡 <strong>팁</strong>: 제어를 시작하려면 "Start Control" 버튼을 클릭하세요.
+						</div>
+					</div>
+				</div>
+			</div>
+			<div class="tutorial-footer">
+				<div class="tutorial-progress">
+					<div class="tutorial-progress-bar">
+						<div class="tutorial-progress-fill" id="tutorial-progress-fill"></div>
+					</div>
+					<span id="tutorial-step-indicator">1 / 3</span>
+				</div>
+				<div class="tutorial-actions">
+					<button class="btn btn-secondary" id="tutorial-skip-btn">건너뛰기</button>
+					<button class="btn btn-secondary" id="tutorial-prev-btn" style="display: none;">이전</button>
+					<button class="btn" id="tutorial-next-btn">다음</button>
+					<button class="btn" id="tutorial-finish-btn" style="display: none;">시작하기</button>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- Keyboard Shortcuts Guide Modal -->
+	<div class="shortcuts-modal" id="shortcuts-modal" style="display: none;">
+		<div class="shortcuts-overlay"></div>
+		<div class="shortcuts-content">
+			<div class="shortcuts-header">
+				<h2>⌨️ 키보드 단축키 가이드</h2>
+				<button class="shortcuts-close" id="shortcuts-close-btn">×</button>
+			</div>
+			<div class="shortcuts-body">
+				<div class="shortcuts-section">
+					<h3>Joint Mode (조인트 모드)</h3>
+					<div class="shortcuts-grid">
+						<div class="shortcut-item">
+							<div class="shortcut-keys">
+								<kbd>I</kbd> / <kbd>K</kbd>
+							</div>
+							<div class="shortcut-desc">Joint 1 증가 / 감소</div>
+						</div>
+						<div class="shortcut-item">
+							<div class="shortcut-keys">
+								<kbd>J</kbd> / <kbd>L</kbd>
+							</div>
+							<div class="shortcut-desc">Joint 2 증가 / 감소</div>
+						</div>
+						<div class="shortcut-item">
+							<div class="shortcut-keys">
+								<kbd>U</kbd> / <kbd>O</kbd>
+							</div>
+							<div class="shortcut-desc">Joint 3 증가 / 감소</div>
+						</div>
+						<div class="shortcut-item">
+							<div class="shortcut-keys">
+								<kbd>7</kbd> / <kbd>9</kbd>
+							</div>
+							<div class="shortcut-desc">Joint 4 증가 / 감소</div>
+						</div>
+						<div class="shortcut-item">
+							<div class="shortcut-keys">
+								<kbd>8</kbd> / <kbd>0</kbd>
+							</div>
+							<div class="shortcut-desc">Joint 5 증가 / 감소</div>
+						</div>
+						<div class="shortcut-item">
+							<div class="shortcut-keys">
+								<kbd>Y</kbd> / <kbd>H</kbd>
+							</div>
+							<div class="shortcut-desc">Joint 6 (그리퍼) 증가 / 감소</div>
+						</div>
+					</div>
+				</div>
+				<div class="shortcuts-section">
+					<h3>Cartesian Mode (직교 좌표 모드)</h3>
+					<div class="shortcuts-grid">
+						<div class="shortcut-item">
+							<div class="shortcut-keys">
+								<kbd>W</kbd> / <kbd>S</kbd>
+							</div>
+							<div class="shortcut-desc">X축 이동 (앞/뒤)</div>
+						</div>
+						<div class="shortcut-item">
+							<div class="shortcut-keys">
+								<kbd>A</kbd> / <kbd>D</kbd>
+							</div>
+							<div class="shortcut-desc">Y축 이동 (좌/우)</div>
+						</div>
+						<div class="shortcut-item">
+							<div class="shortcut-keys">
+								<kbd>Q</kbd> / <kbd>E</kbd>
+							</div>
+							<div class="shortcut-desc">Z축 이동 (위/아래)</div>
+						</div>
+						<div class="shortcut-item">
+							<div class="shortcut-keys">
+								<kbd>R</kbd> / <kbd>F</kbd>
+							</div>
+							<div class="shortcut-desc">Roll 회전</div>
+						</div>
+						<div class="shortcut-item">
+							<div class="shortcut-keys">
+								<kbd>T</kbd> / <kbd>G</kbd>
+							</div>
+							<div class="shortcut-desc">Pitch 회전</div>
+						</div>
+						<div class="shortcut-item">
+							<div class="shortcut-keys">
+								<kbd>Z</kbd> / <kbd>X</kbd>
+							</div>
+							<div class="shortcut-desc">Yaw 회전</div>
+						</div>
+					</div>
+				</div>
+				<div class="shortcuts-section">
+					<h3>공통 단축키</h3>
+					<div class="shortcuts-grid">
+						<div class="shortcut-item">
+							<div class="shortcut-keys">
+								<kbd>M</kbd>
+							</div>
+							<div class="shortcut-desc">모드 전환 (Joint → Cartesian → Gripper)</div>
+						</div>
+						<div class="shortcut-item">
+							<div class="shortcut-keys">
+								<kbd>+</kbd> / <kbd>-</kbd>
+							</div>
+							<div class="shortcut-desc">속도 증가 / 감소</div>
+						</div>
+						<div class="shortcut-item">
+							<div class="shortcut-keys">
+								<kbd>Space</kbd>
+							</div>
+							<div class="shortcut-desc">긴급 정지 (E-Stop)</div>
+						</div>
+						<div class="shortcut-item">
+							<div class="shortcut-keys">
+								<kbd>C</kbd>
+							</div>
+							<div class="shortcut-desc">그리퍼 토글 (Gripper 모드)</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<script src="/static/js/dashboard.js"></script>
+</body>
+</html>
