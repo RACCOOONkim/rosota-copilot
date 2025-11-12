@@ -217,6 +217,10 @@ class SOArm100Adapter:
 			# zero_joints에서 설정한 calibration_offsets는 이미 FeetechMotorsBus의
 			# 캘리브레이션에 포함되어야 하므로, 여기서는 추가로 빼지 않음
 			# 대신 zero_joints에서 FeetechMotorsBus의 캘리브레이션을 업데이트해야 함
+			
+			# 읽은 값을 캐시에 즉시 업데이트 (정확한 위치 추적)
+			self._sim_joint_positions[joint_index] = degrees
+			
 			return degrees
 			
 		except ConnectionError as e:
@@ -322,11 +326,22 @@ class SOArm100Adapter:
 					print(f"[SOArm] Warning: Could not check/enable torque: {e}")
 					# 토크 확인 실패해도 계속 진행
 				
-				# 현재 위치 읽기
-				current_pos = self._read_joint_position(joint_index)
+				# 현재 위치 읽기 (여러 번 시도)
+				current_pos = None
+				for retry in range(3):
+					current_pos = self._read_joint_position(joint_index)
+					if current_pos is not None:
+						break
+					import time
+					time.sleep(0.01)  # 짧은 대기 후 재시도
+				
+				# 읽기 실패 시 캐시 사용하되 경고
 				if current_pos is None:
-					print(f"[SOArm] Could not read current position for joint {joint_index}, using cached value")
+					logger.warning(f"[SOArm] Could not read current position for joint {joint_index} after 3 retries, using cached value")
 					current_pos = self._sim_joint_positions[joint_index]
+				else:
+					# 성공적으로 읽었으면 캐시 업데이트
+					self._sim_joint_positions[joint_index] = current_pos
 				
 				# 새 위치 계산
 				new_position = current_pos + delta_deg
@@ -335,18 +350,42 @@ class SOArm100Adapter:
 				limits = self.joint_limits[joint_index]
 				if new_position < limits[0] or new_position > limits[1]:
 					limit_type = "lower" if new_position < limits[0] else "upper"
-					print(f"[SOArm] Joint {joint_index} ({motor_name}) limit exceeded: {new_position:.2f}° not in [{limits[0]:.2f}, {limits[1]:.2f}] (current: {current_pos:.2f}°, delta: {delta_deg:.2f}°, {limit_type} limit)")
+					logger.warning(
+						f"Joint {joint_index} ({motor_name}) limit exceeded: {new_position:.2f}° not in [{limits[0]:.2f}, {limits[1]:.2f}] "
+						f"(current: {current_pos:.2f}°, delta: {delta_deg:.2f}°, {limit_type} limit)"
+					)
 					return False  # 제한 초과
+				
+				# Goal_Speed 설정 (일정한 속도로 움직이도록)
+				# Goal_Speed는 0-1023 범위 (0: 최대 속도, 1023: 최소 속도)
+				# 중간 속도로 설정 (약 500-600 정도가 적당)
+				goal_speed = 500  # 일정한 속도 (0-1023 범위, 작을수록 빠름)
+				try:
+					self.motors_bus.write("Goal_Speed", values=[goal_speed], motor_names=motor_name)
+				except Exception as e:
+					logger.debug(f"Could not set Goal_Speed for {motor_name}: {e}")
+					# Goal_Speed 설정 실패해도 계속 진행
 				
 				# FeetechMotorsBus.write는 각도(도) 값을 받아서 revert_calibration을 자동으로 적용함
 				# calibration_offsets는 FeetechMotorsBus의 캘리브레이션에 포함되어야 하므로
 				# 여기서는 직접 각도 값을 전달
-				print(f"[SOArm] Moving joint {joint_index} ({motor_name}): {current_pos:.2f}° -> {new_position:.2f}° (delta: {delta_deg:.2f}°)")
+				logger.debug(f"Moving joint {joint_index} ({motor_name}): {current_pos:.2f}° -> {new_position:.2f}° (delta: {delta_deg:.2f}°, limits: [{limits[0]:.2f}, {limits[1]:.2f}])")
 				self.motors_bus.write("Goal_Position", values=[new_position], motor_names=motor_name)
-				print(f"[SOArm] Joint {joint_index} write command sent successfully")
+				logger.debug(f"Joint {joint_index} write command sent successfully")
 				
-				# 시뮬레이션 상태 업데이트
+				# 목표 위치를 캐시에 저장 (실제 위치는 다음 읽기에서 업데이트됨)
+				# 하지만 즉시 업데이트하지 않고, 다음 get_state() 호출 시 실제 위치를 읽어서 업데이트
+				# 이렇게 하면 빠른 연속 명령에서도 정확한 위치 추적 가능
 				self._sim_joint_positions[joint_index] = new_position
+				
+				# 짧은 대기 후 실제 위치를 다시 읽어서 캐시 업데이트 (선택적)
+				# 빠른 연속 명령에서는 이 부분이 오버헤드가 될 수 있으므로 주석 처리
+				# import time
+				# time.sleep(0.05)  # 모터가 움직일 시간을 줌
+				# actual_pos = self._read_joint_position(joint_index)
+				# if actual_pos is not None:
+				#     self._sim_joint_positions[joint_index] = actual_pos
+				
 				return True
 				
 			except Exception as e:

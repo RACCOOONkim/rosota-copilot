@@ -10,6 +10,7 @@ from .api.routes import api_router
 from .robot.so_arm import SOArm100Adapter
 from .robot.keyboard_control import KeyboardController
 from .robot.calibration import CalibrationManager
+from .robot.motor_setup import MotorSetupManager
 from .config import DEFAULT_CONFIG
 
 load_dotenv()
@@ -46,6 +47,7 @@ def calibration_log_callback(message: str, level: str = "info"):
 
 calibration_manager = CalibrationManager(robot_adapter, log_callback=calibration_log_callback)
 keyboard_controller = KeyboardController(robot_adapter)
+motor_setup_manager = MotorSetupManager()
 
 # State update task
 state_update_task = None
@@ -74,6 +76,7 @@ def create_app() -> FastAPI:
 	app.state.robot_adapter = robot_adapter
 	app.state.keyboard_controller = keyboard_controller
 	app.state.calibration_manager = calibration_manager
+	app.state.motor_setup_manager = motor_setup_manager
 
 	# Basic index
 	@app.get("/", response_class=HTMLResponse)
@@ -232,6 +235,20 @@ async def auto_connect_robot():
 			success = robot_adapter.connect(port=port, baudrate=115200)
 			if success:
 				print(f"Auto-connected to robot on {port}")
+				# 캘리브레이션 매니저에 로봇 어댑터 연결
+				calibration_manager.robot = robot_adapter
+				
+				# 캘리브레이션 데이터 자동 로드 (조인트 제한값 업데이트)
+				try:
+					from .config import CALIBRATION_DIR
+					import os
+					calib_file = os.path.join(CALIBRATION_DIR, "calibration.json")
+					if os.path.exists(calib_file):
+						calibration_manager.load(calib_file)
+				except Exception as e:
+					# 캘리브레이션 파일이 없거나 로드 실패해도 연결은 성공
+					print(f"[Server] Warning: Could not load calibration data: {e}")
+				
 				# 모든 클라이언트에 연결 상태 알림
 				await sio.emit("robot:auto_connected", {
 					"port": port,

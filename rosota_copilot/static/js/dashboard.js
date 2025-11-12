@@ -17,6 +17,7 @@
 	const statusText = document.getElementById("status-text");
 	const topStatusDot = document.getElementById("top-status-dot");
 	const topStatusText = document.getElementById("top-status-text");
+	const topCalibrationStatus = document.getElementById("top-calibration-status");
 	const topPort = document.getElementById("top-port");
 	const topBaudrate = document.getElementById("top-baudrate");
 	const topConnectionInfo = document.getElementById("top-connection-info");
@@ -100,6 +101,12 @@
 			"label.robot_status": "로봇 상태:",
 			"label.port": "포트:",
 			"label.baudrate": "보드레이트:",
+			"label.motor_setup": "모터 설정:",
+			"label.calibration": "캘리브레이션:",
+			"status.configured": "✓ 설정 완료",
+			"status.not_configured": "설정 안됨",
+			"status.calibrated": "✓ 캘리브레이션 완료",
+			"status.not_calibrated": "캘리브레이션 안됨",
 			"label.connection_type": "연결 타입",
 			"label.host": "호스트",
 			"label.progress": "진행률",
@@ -122,6 +129,10 @@
 			"btn.start_calibration": "▶ 캘리브레이션 시작",
 			"btn.next_step": "다음 단계 →",
 			"btn.cancel": "취소",
+			"btn.record_min": "최소값 기록",
+			"btn.record_max": "최대값 기록",
+			"btn.auto_record": "✓ 자동 기록",
+			"wizard.realtime_info": "실시간 조인트 위치",
 			"btn.home_position": "홈 포지션",
 			"btn.zero_joints": "조인트 제로",
 			"btn.run_calibration": "캘리브레이션 실행",
@@ -203,6 +214,12 @@
 			"label.robot_status": "Robot Status:",
 			"label.port": "Port:",
 			"label.baudrate": "Baudrate:",
+			"label.motor_setup": "Motor Setup:",
+			"label.calibration": "Calibration:",
+			"status.configured": "✓ Configured",
+			"status.not_configured": "Not Configured",
+			"status.calibrated": "✓ Calibrated",
+			"status.not_calibrated": "Not Calibrated",
 			"label.connection_type": "Connection Type",
 			"label.host": "Host",
 			"label.progress": "Progress",
@@ -225,6 +242,10 @@
 			"btn.start_calibration": "▶ Start Calibration",
 			"btn.next_step": "Next Step →",
 			"btn.cancel": "Cancel",
+			"btn.record_min": "Record Min",
+			"btn.record_max": "Record Max",
+			"btn.auto_record": "✓ Auto Record",
+			"wizard.realtime_info": "Real-time Joint Positions",
 			"btn.home_position": "Home Position",
 			"btn.zero_joints": "Zero Joints",
 			"btn.run_calibration": "Run Calibration",
@@ -414,13 +435,39 @@
 
 	// Update joint display
 	function updateJointDisplay(joints) {
+		if (!joints || !Array.isArray(joints)) return;
+		
+		const jointDisplay = document.getElementById("joint-display");
+		if (!jointDisplay) return;
+		
+		// 조인트 이름과 ID 매핑
+		const jointNames = ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll", "gripper"];
+		const jointIds = [1, 2, 3, 4, 5, 6]; // 모터 ID
+		
+		// 기존 내용 제거
+		jointDisplay.innerHTML = "";
+		
+		// 각 조인트에 대한 항목 생성
 		for (let i = 0; i < 6; i++) {
-			const el = document.getElementById(`joint-${i}`);
-			if (el && joints[i] !== undefined) {
-				el.textContent = `${joints[i].toFixed(1)}°`;
-			}
+			const jointItem = document.createElement("div");
+			jointItem.className = "joint-item";
+			
+			const jointName = jointNames[i] || `Joint ${i + 1}`;
+			const jointId = jointIds[i] || i + 1;
+			const position = joints[i] !== undefined ? joints[i].toFixed(1) : "0.0";
+			
+			jointItem.innerHTML = `
+				<span style="display: flex; align-items: center; gap: 8px;">
+					<span style="font-weight: 600;">${jointName}</span>
+					<span style="font-size: 11px; color: var(--text-secondary);">(ID: ${jointId})</span>
+				</span>
+				<span class="joint-value" id="joint-${i}">${position}°</span>
+			`;
+			
+			jointDisplay.appendChild(jointItem);
 		}
 	}
+	
 
 	// Load available ports
 	async function loadPorts() {
@@ -1105,20 +1152,31 @@
 	const wizardStartBtn = document.getElementById("wizard-start-btn");
 	const wizardNextBtn = document.getElementById("wizard-next-btn");
 	const wizardCancelBtn = document.getElementById("wizard-cancel-btn");
+	const wizardRecordMinBtn = document.getElementById("wizard-record-min-btn");
+	const wizardRecordMaxBtn = document.getElementById("wizard-record-max-btn");
+	const wizardAutoRecordBtn = document.getElementById("wizard-auto-record-btn");
 	const wizardStepText = document.getElementById("wizard-step-text");
 	const wizardProgressBar = document.getElementById("wizard-progress-bar");
 	const wizardInstructionText = document.getElementById("wizard-instruction-text");
+	const wizardRealtimeInfo = document.getElementById("wizard-realtime-info");
+	const wizardJointsList = document.getElementById("wizard-joints-list");
 	
 	let wizardActive = false;
+	let realtimeUpdateInterval = null;
 	
 	showWizardBtn?.addEventListener("click", () => {
 		wizardCard.style.display = "block";
 		wizardStartBtn.style.display = "block";
 		wizardNextBtn.style.display = "none";
 		wizardCancelBtn.style.display = "none";
+		wizardRecordMinBtn.style.display = "none";
+		wizardRecordMaxBtn.style.display = "none";
+		wizardAutoRecordBtn.style.display = "none";
+		wizardRealtimeInfo.style.display = "none";
 		wizardStepText.textContent = "Step 0/3";
 		wizardProgressBar.style.width = "0%";
 		wizardInstructionText.textContent = "Ready to start calibration. Make sure the robot is connected and powered on.";
+		stopRealtimeUpdate();
 	});
 	
 	wizardStartBtn?.addEventListener("click", async () => {
@@ -1152,8 +1210,94 @@
 		wizardCard.style.display = "none";
 		wizardStartBtn.style.display = "block";
 		wizardNextBtn.style.display = "none";
+		wizardRecordMinBtn.style.display = "none";
+		wizardRecordMaxBtn.style.display = "none";
+		wizardAutoRecordBtn.style.display = "none";
 		wizardCancelBtn.style.display = "none";
+		wizardRealtimeInfo.style.display = "none";
+		stopRealtimeUpdate();
 		log("Calibration wizard cancelled", "info");
+	});
+	
+	// Auto Record 버튼 (자동 기록)
+	wizardAutoRecordBtn?.addEventListener("click", async () => {
+		try {
+			setButtonLoading(wizardAutoRecordBtn, true);
+			const res = await fetch("/api/calibration/wizard/auto-record", { method: "POST" });
+			const json = await res.json();
+			
+			if (json.ok) {
+				log(`Auto-recorded min/max for joint ${json.status.current_joint_index}`, "success");
+				updateRealtimeInfo(json.status);
+				// 자동 기록 후 다음 조인트로 이동
+				if (json.status.current_joint_index >= 6) {
+					// 모든 조인트 측정 완료
+					await executeWizardStep();
+				} else {
+					// 다음 조인트로 이동
+					await executeWizardStep();
+				}
+			} else {
+				log(`Failed to auto-record: ${json.detail || json.message}`, "error");
+			}
+		} catch (error) {
+			log(`Error auto-recording: ${error.message}`, "error");
+		} finally {
+			setButtonLoading(wizardAutoRecordBtn, false);
+		}
+	});
+	
+	// Record Min 버튼
+	wizardRecordMinBtn?.addEventListener("click", async () => {
+		try {
+			setButtonLoading(wizardRecordMinBtn, true);
+			const res = await fetch("/api/calibration/wizard/record-min", { method: "POST" });
+			const json = await res.json();
+			
+			if (json.ok) {
+				log(`Minimum position recorded for joint ${json.status.current_joint_index + 1}`, "success");
+				updateRealtimeInfo(json.status);
+				// 최소값 기록 후 다음 단계로 진행할지 확인
+				if (json.status.current_joint_index >= 6) {
+					// 모든 조인트 측정 완료
+					await executeWizardStep();
+				}
+			} else {
+				log(`Failed to record min: ${json.detail || json.message}`, "error");
+			}
+		} catch (error) {
+			log(`Error recording min: ${error.message}`, "error");
+		} finally {
+			setButtonLoading(wizardRecordMinBtn, false);
+		}
+	});
+	
+	// Record Max 버튼
+	wizardRecordMaxBtn?.addEventListener("click", async () => {
+		try {
+			setButtonLoading(wizardRecordMaxBtn, true);
+			const res = await fetch("/api/calibration/wizard/record-max", { method: "POST" });
+			const json = await res.json();
+			
+			if (json.ok) {
+				log(`Maximum position recorded for joint ${json.status.current_joint_index}`, "success");
+				updateRealtimeInfo(json.status);
+				// 최대값 기록 후 다음 조인트로 자동 이동
+				if (json.status.current_joint_index >= 6) {
+					// 모든 조인트 측정 완료
+					await executeWizardStep();
+				} else {
+					// 다음 조인트로 이동
+					await executeWizardStep();
+				}
+			} else {
+				log(`Failed to record max: ${json.detail || json.message}`, "error");
+			}
+		} catch (error) {
+			log(`Error recording max: ${error.message}`, "error");
+		} finally {
+			setButtonLoading(wizardRecordMaxBtn, false);
+		}
 	});
 	
 	async function executeWizardStep() {
@@ -1173,31 +1317,176 @@
 				wizardProgressBar.style.width = `${progress}%`;
 				wizardInstructionText.textContent = json.message || "";
 				
+				// Step 2일 때 실시간 정보 표시 및 Record 버튼 표시
+				if (step === 2) {
+					wizardRealtimeInfo.style.display = "block";
+					wizardRecordMinBtn.style.display = "inline-block";
+					wizardRecordMaxBtn.style.display = "inline-block";
+					wizardAutoRecordBtn.style.display = "inline-block";
+					wizardNextBtn.style.display = "none";
+					startRealtimeUpdate();
+				} else {
+					wizardRealtimeInfo.style.display = "none";
+					wizardRecordMinBtn.style.display = "none";
+					wizardRecordMaxBtn.style.display = "none";
+					wizardAutoRecordBtn.style.display = "none";
+					wizardNextBtn.style.display = "block";
+					stopRealtimeUpdate();
+				}
+				
 				if (json.status === "success") {
 					wizardActive = false;
 					wizardNextBtn.style.display = "none";
+					wizardRecordMinBtn.style.display = "none";
+					wizardRecordMaxBtn.style.display = "none";
+					wizardAutoRecordBtn.style.display = "none";
 					wizardCancelBtn.textContent = "Close";
+					stopRealtimeUpdate();
 					log("Calibration completed successfully!", "success");
+					updateCalibrationStatus(); // 상태 업데이트
 				} else if (json.status === "error") {
 					wizardActive = false;
 					wizardNextBtn.style.display = "none";
+					wizardRecordMinBtn.style.display = "none";
+					wizardRecordMaxBtn.style.display = "none";
+					wizardAutoRecordBtn.style.display = "none";
+					stopRealtimeUpdate();
 					log(`Calibration error: ${json.message}`, "error");
 				}
 			} else {
 				log(`Calibration step failed: ${json.detail || json.message}`, "error");
 				wizardActive = false;
+				stopRealtimeUpdate();
 			}
 		} catch (error) {
 			log(`Calibration step error: ${error.message}`, "error");
 			wizardActive = false;
+			stopRealtimeUpdate();
 		} finally {
 			setButtonLoading(wizardNextBtn, false);
 		}
 	}
+	
+	// 실시간 업데이트 시작
+	function startRealtimeUpdate() {
+		stopRealtimeUpdate(); // 기존 인터벌 정리
+		
+		// 즉시 한 번 실행
+		updateRealtimePositions();
+		
+		// 100ms마다 업데이트
+		realtimeUpdateInterval = setInterval(() => {
+			updateRealtimePositions();
+		}, 100);
+	}
+	
+	// 실시간 업데이트 중지
+	function stopRealtimeUpdate() {
+		if (realtimeUpdateInterval) {
+			clearInterval(realtimeUpdateInterval);
+			realtimeUpdateInterval = null;
+		}
+	}
+	
+	// 실시간 위치 정보 업데이트
+	async function updateRealtimePositions() {
+		if (!wizardActive) {
+			stopRealtimeUpdate();
+			return;
+		}
+		
+		try {
+			const res = await fetch("/api/calibration/wizard/realtime");
+			const json = await res.json();
+			
+			if (json.ok && json.status) {
+				updateRealtimeInfo(json.status);
+			}
+		} catch (error) {
+			console.error("Failed to update realtime positions:", error);
+		}
+	}
+	
+	// 실시간 정보 UI 업데이트
+	function updateRealtimeInfo(status) {
+		if (!wizardJointsList) return;
+		
+		const jointNames = ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll", "gripper"];
+		const positions = status.positions || [];
+		const realtimeMin = status.min_positions || [];
+		const realtimeMax = status.max_positions || [];
+		const recordedMin = status.recorded_min || [];
+		const recordedMax = status.recorded_max || [];
+		const currentJointIndex = status.current_joint_index || 0;
+		
+		wizardJointsList.innerHTML = "";
+		
+		for (let i = 0; i < 6; i++) {
+			const jointItem = document.createElement("div");
+			jointItem.style.padding = "12px";
+			jointItem.style.background = i === currentJointIndex ? "rgba(59, 130, 246, 0.1)" : "var(--bg-secondary)";
+			jointItem.style.borderRadius = "6px";
+			jointItem.style.border = i === currentJointIndex ? "2px solid var(--accent)" : "1px solid var(--border)";
+			
+			const jointName = jointNames[i] || `Joint ${i + 1}`;
+			const pos = positions[i] !== undefined ? positions[i].toFixed(1) : "0.0";
+			const min = realtimeMin[i] !== null && realtimeMin[i] !== undefined ? realtimeMin[i].toFixed(1) : "-";
+			const max = realtimeMax[i] !== null && realtimeMax[i] !== undefined ? realtimeMax[i].toFixed(1) : "-";
+			const recMin = recordedMin[i] !== null && recordedMin[i] !== undefined ? recordedMin[i].toFixed(1) : "-";
+			const recMax = recordedMax[i] !== null && recordedMax[i] !== undefined ? recordedMax[i].toFixed(1) : "-";
+			
+			jointItem.innerHTML = `
+				<div style="font-weight: 600; font-size: 13px; margin-bottom: 6px; color: ${i === currentJointIndex ? 'var(--accent)' : 'var(--text-primary)'};">
+					${jointName} ${i === currentJointIndex ? '← 현재 측정 중' : ''}
+				</div>
+				<div style="font-size: 12px; line-height: 1.6;">
+					<div style="color: var(--text-secondary);">현재 위치: <span style="color: var(--text-primary); font-weight: 600;">${pos}°</span></div>
+					<div style="color: var(--text-secondary);">실시간 Min: <span style="color: #60a5fa;">${min}°</span></div>
+					<div style="color: var(--text-secondary);">실시간 Max: <span style="color: #60a5fa;">${max}°</span></div>
+					${recMin !== "-" || recMax !== "-" ? `
+						<div style="margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--border);">
+							<div style="color: var(--success); font-size: 11px;">✓ 기록됨: ${recMin}° ~ ${recMax}°</div>
+						</div>
+					` : ''}
+				</div>
+			`;
+			
+			wizardJointsList.appendChild(jointItem);
+		}
+	}
 
+	// 상태 업데이트 함수
+	async function updateCalibrationStatus() {
+		try {
+			const res = await fetch("/api/calibration/status");
+			const json = await res.json();
+			
+			if (json.ok && topCalibrationStatus) {
+				if (json.is_calibrated) {
+					topCalibrationStatus.className = "status-badge calibrated";
+					topCalibrationStatus.textContent = "✓ Calibrated";
+					topCalibrationStatus.setAttribute("data-i18n", "status.calibrated");
+				} else {
+					topCalibrationStatus.className = "status-badge not_calibrated";
+					topCalibrationStatus.textContent = "Not Calibrated";
+					topCalibrationStatus.setAttribute("data-i18n", "status.not_calibrated");
+				}
+				applyLanguage(); // 번역 적용
+			}
+		} catch (error) {
+			console.error("Failed to update calibration status:", error);
+		}
+	}
+	
+	// 주기적으로 상태 업데이트 (5초마다)
+	setInterval(() => {
+		updateCalibrationStatus();
+	}, 5000);
+	
 	// Initialize
 	updateKeyboardHints("joint");
 	loadPorts(); // Load ports on page load
+	updateCalibrationStatus(); // 초기 상태 업데이트
 	log("Rosota Copilot initialized", "success");
 	
 	// 초기 모드 텍스트 번역 적용

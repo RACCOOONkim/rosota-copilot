@@ -41,6 +41,21 @@ async def connect_robot(req: ConnectRequest, request: Request):
 
 		success = robot_adapter.connect(port=port, host=host, baudrate=baud)
 		if success:
+			# 캘리브레이션 매니저에 로봇 어댑터 연결
+			calibration_manager = request.app.state.calibration_manager
+			calibration_manager.robot = robot_adapter
+			
+			# 캘리브레이션 데이터 자동 로드 (조인트 제한값 업데이트)
+			try:
+				from ..config import CALIBRATION_DIR
+				import os
+				calib_file = os.path.join(CALIBRATION_DIR, "calibration.json")
+				if os.path.exists(calib_file):
+					calibration_manager.load(calib_file)
+			except Exception as e:
+				# 캘리브레이션 파일이 없거나 로드 실패해도 연결은 성공
+				print(f"[API] Warning: Could not load calibration data: {e}")
+			
 			# 전압 정보 포함
 			voltage_info = {
 				"detected_voltage": getattr(robot_adapter, 'detected_voltage', None),
@@ -115,7 +130,89 @@ async def calibration_wizard_reset(request: Request):
 	try:
 		calibration_manager = request.app.state.calibration_manager
 		calibration_manager.calibration_current_step = 0
+		calibration_manager.joint_min_positions = [None] * 6
+		calibration_manager.joint_max_positions = [None] * 6
+		calibration_manager.realtime_min_positions = [None] * 6
+		calibration_manager.realtime_max_positions = [None] * 6
+		calibration_manager.current_joint_index = 0
 		return {"ok": True, "message": "Calibration wizard reset"}
+	except Exception as e:
+		raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/calibration/wizard/record-min")
+async def calibration_record_min(request: Request):
+	"""현재 조인트의 최소 위치 기록"""
+	try:
+		calibration_manager = request.app.state.calibration_manager
+		success = calibration_manager.record_joint_min()
+		if not success:
+			raise HTTPException(status_code=400, detail="Cannot record min position at this step")
+		
+		status = calibration_manager.get_calibration_status()
+		return {
+			"ok": True,
+			"message": "Minimum position recorded",
+			"status": status
+		}
+	except HTTPException:
+		raise
+	except Exception as e:
+		raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/calibration/wizard/record-max")
+async def calibration_record_max(request: Request):
+	"""현재 조인트의 최대 위치 기록"""
+	try:
+		calibration_manager = request.app.state.calibration_manager
+		success = calibration_manager.record_joint_max()
+		if not success:
+			raise HTTPException(status_code=400, detail="Cannot record max position at this step")
+		
+		status = calibration_manager.get_calibration_status()
+		return {
+			"ok": True,
+			"message": "Maximum position recorded",
+			"status": status
+		}
+	except HTTPException:
+		raise
+	except Exception as e:
+		raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/calibration/wizard/realtime")
+async def calibration_realtime(request: Request):
+	"""실시간 조인트 위치 및 min/max 정보 조회"""
+	try:
+		calibration_manager = request.app.state.calibration_manager
+		status = calibration_manager.update_realtime_positions()
+		return {
+			"ok": True,
+			"status": status
+		}
+	except Exception as e:
+		raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/calibration/wizard/auto-record")
+async def calibration_auto_record(request: Request):
+	"""현재 조인트의 실시간 추적된 min/max를 자동으로 기록"""
+	try:
+		calibration_manager = request.app.state.calibration_manager
+		success = calibration_manager.auto_record_current_joint()
+		if not success:
+			raise HTTPException(status_code=400, detail="Cannot auto-record at this step")
+		
+		status = calibration_manager.get_calibration_status()
+		return {
+			"ok": True,
+			"message": "Auto-recorded min/max positions",
+			"status": status
+		}
+	except HTTPException:
+		raise
 	except Exception as e:
 		raise HTTPException(status_code=500, detail=str(e))
 
@@ -600,9 +697,46 @@ async def setup_status(request: Request):
 	"""모터 설정 상태 조회"""
 	try:
 		motor_setup_manager = request.app.state.motor_setup_manager
+		status = motor_setup_manager.get_status()
+		
+		# 모터 설정 완료 여부 확인 (6개 모터 모두 설정되었는지)
+		configured_count = len(status.get("configured_motors", []))
+		is_configured = configured_count >= 6
+		
 		return {
 			"ok": True,
-			**motor_setup_manager.get_status()
+			"is_configured": is_configured,
+			"configured_count": configured_count,
+			**status
+		}
+	except Exception as e:
+		raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/calibration/status")
+async def calibration_status(request: Request):
+	"""캘리브레이션 상태 조회"""
+	try:
+		calibration_manager = request.app.state.calibration_manager
+		from ..config import CALIBRATION_DIR
+		import os
+		
+		calib_file = os.path.join(CALIBRATION_DIR, "calibration.json")
+		is_calibrated = os.path.exists(calib_file)
+		
+		# 캘리브레이션 데이터가 있고 joint_ranges가 있으면 완료로 간주
+		if is_calibrated:
+			try:
+				calibration_manager.load(calib_file)
+				has_joint_ranges = "joint_ranges" in calibration_manager.data
+				is_calibrated = has_joint_ranges
+			except:
+				is_calibrated = False
+		
+		return {
+			"ok": True,
+			"is_calibrated": is_calibrated,
+			"has_calibration_file": os.path.exists(calib_file)
 		}
 	except Exception as e:
 		raise HTTPException(status_code=500, detail=str(e))

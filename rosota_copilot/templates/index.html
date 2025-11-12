@@ -1173,6 +1173,40 @@
 			color: var(--text-secondary);
 		}
 
+		.status-badge {
+			padding: 4px 10px;
+			border-radius: 12px;
+			font-size: 12px;
+			font-weight: 600;
+			display: inline-flex;
+			align-items: center;
+			gap: 4px;
+		}
+
+		.status-badge.configured {
+			background: rgba(16, 185, 129, 0.1);
+			color: var(--success);
+			border: 1px solid var(--success);
+		}
+
+		.status-badge.not_configured {
+			background: rgba(239, 68, 68, 0.1);
+			color: var(--error);
+			border: 1px solid var(--error);
+		}
+
+		.status-badge.calibrated {
+			background: rgba(16, 185, 129, 0.1);
+			color: var(--success);
+			border: 1px solid var(--success);
+		}
+
+		.status-badge.not_calibrated {
+			background: rgba(245, 158, 11, 0.1);
+			color: var(--warning);
+			border: 1px solid var(--warning);
+		}
+
 		.main-content {
 			padding-top: 60px;
 		}
@@ -1193,6 +1227,10 @@
 		<div class="top-status-info" id="top-baudrate-info" style="display: none;">
 			<span class="top-status-label" data-i18n="label.baudrate">Baudrate:</span>
 			<span class="top-status-value" id="top-baudrate">-</span>
+		</div>
+		<div class="top-status-info" id="top-calibration-info">
+			<span class="top-status-label" data-i18n="label.calibration">Calibration:</span>
+			<span class="status-badge" id="top-calibration-status" data-i18n="status.not_calibrated">Not Calibrated</span>
 		</div>
 		<div class="language-menu">
 			<button class="language-toggle" id="language-toggle-btn" type="button" onclick="window.toggleLanguageDropdown && window.toggleLanguageDropdown(event)">
@@ -1257,10 +1295,6 @@
 			<div class="menu-item" data-section="control">
 				<span class="menu-item-icon">⌨️</span>
 				<span data-i18n="menu.control">Control</span>
-			</div>
-			<div class="menu-item" data-section="status">
-				<span class="menu-item-icon">📊</span>
-				<span data-i18n="menu.status">Status</span>
 			</div>
 		</div>
 		<div class="status-indicator">
@@ -1532,9 +1566,23 @@
 						Ready to start calibration. Make sure the robot is connected and powered on.
 					</p>
 				</div>
+				
+				<!-- 실시간 조인트 위치 표시 (Step 2일 때만 표시) -->
+				<div id="wizard-realtime-info" style="display: none; margin-bottom: 16px;">
+					<div style="padding: 16px; background: var(--bg-primary); border-radius: 8px; border: 1px solid var(--border);">
+						<h4 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600;" data-i18n="wizard.realtime_info">실시간 조인트 위치</h4>
+						<div id="wizard-joints-list" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
+							<!-- 조인트별 정보가 여기에 동적으로 추가됨 -->
+						</div>
+					</div>
+				</div>
+				
 				<div class="btn-group">
 					<button class="btn" id="wizard-start-btn" data-i18n="btn.start_calibration">▶ Start Calibration</button>
 					<button class="btn" id="wizard-next-btn" style="display: none;" data-i18n="btn.next_step">Next Step →</button>
+					<button class="btn btn-secondary" id="wizard-record-min-btn" style="display: none;" data-i18n="btn.record_min">Record Min</button>
+					<button class="btn btn-secondary" id="wizard-record-max-btn" style="display: none;" data-i18n="btn.record_max">Record Max</button>
+					<button class="btn" id="wizard-auto-record-btn" style="display: none;" data-i18n="btn.auto_record">✓ 자동 기록</button>
 					<button class="btn btn-secondary" id="wizard-cancel-btn" style="display: none;" data-i18n="btn.cancel">Cancel</button>
 				</div>
 			</div>
@@ -1596,41 +1644,10 @@
 				<div class="card full-width">
 					<button class="btn estop-btn" id="estop-btn" data-i18n="btn.emergency_stop">EMERGENCY STOP</button>
 				</div>
-			</div>
-		</div>
-
-		<!-- Status Section -->
-		<div class="content-section" id="section-status">
-			<div class="section-header">
-				<h2 data-i18n="section.status.title">Robot Status</h2>
-				<p data-i18n="section.status.description">실시간 로봇 상태 모니터링</p>
-			</div>
-			<div class="card">
-				<div class="card-title" data-i18n="card.joint_positions">Joint Positions</div>
-				<div class="joint-display" id="joint-display">
-					<div class="joint-item">
-						<span>Joint 1</span>
-						<span class="joint-value" id="joint-0">0.0°</span>
-					</div>
-					<div class="joint-item">
-						<span>Joint 2</span>
-						<span class="joint-value" id="joint-1">0.0°</span>
-					</div>
-					<div class="joint-item">
-						<span>Joint 3</span>
-						<span class="joint-value" id="joint-2">0.0°</span>
-					</div>
-					<div class="joint-item">
-						<span>Joint 4</span>
-						<span class="joint-value" id="joint-3">0.0°</span>
-					</div>
-					<div class="joint-item">
-						<span>Joint 5</span>
-						<span class="joint-value" id="joint-4">0.0°</span>
-					</div>
-					<div class="joint-item">
-						<span>Joint 6</span>
-						<span class="joint-value" id="joint-5">0.0°</span>
+				<div class="card full-width">
+					<div class="card-title" data-i18n="card.joint_positions">Joint Positions</div>
+					<div class="joint-display" id="joint-display">
+						<!-- 조인트 위치는 JavaScript에서 동적으로 생성 -->
 					</div>
 				</div>
 			</div>
