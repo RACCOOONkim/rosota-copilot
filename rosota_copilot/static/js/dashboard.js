@@ -56,6 +56,7 @@
 		ko: {
 			"menu.tutorial": "튜토리얼",
 			"menu.connection": "연결",
+			"menu.motor_setup": "모터 설정",
 			"menu.calibration": "캘리브레이션",
 			"menu.control": "제어",
 			"menu.status": "상태",
@@ -73,6 +74,29 @@
 			"section.control.description": "키보드로 로봇 제어",
 			"section.status.title": "로봇 상태",
 			"section.status.description": "실시간 로봇 상태 모니터링",
+			"section.motor_setup.title": "모터 설정",
+			"section.motor_setup.description": "SO-100 로봇 모터 ID 및 baudrate 설정",
+			"card.motor_setup_wizard": "모터 설정 마법사",
+			"motor_setup.step1.title": "1단계: 로봇 타입 선택",
+			"motor_setup.step1.description": "Follower 또는 Leader 팔을 선택하세요.",
+			"motor_setup.step2.title": "2단계: MotorsBus 포트 찾기",
+			"motor_setup.step2.description": "MotorsBus에서 USB 케이블을 분리하고 아래 버튼을 클릭하세요.",
+			"motor_setup.step3.title": "3단계: 모터 설정",
+			"motor_setup.step3.description": "모터를 하나씩 설정하세요. 한 번에 하나의 모터만 연결하세요. 리스트에서 모터를 클릭하여 선택할 수 있습니다.",
+			"motor_setup.follower": "Follower 팔",
+			"motor_setup.leader": "Leader 팔",
+			"motor_setup.find_port": "포트 찾기",
+			"motor_setup.port_found": "포트 찾음:",
+			"motor_setup.reconnect_cable": "이제 USB 케이블을 다시 연결하세요.",
+			"motor_setup.current_motor": "현재 모터:",
+			"motor_setup.connect_single_motor": "컨트롤러 보드에 이 모터만 연결되어 있는지 확인하세요.",
+			"motor_setup.configure_motor": "모터 설정",
+			"motor_setup.check_id": "ID 확인",
+			"motor_setup.reset_motor": "모터 ID 초기화",
+			"motor_setup.reset_motor_hint": "모터가 이미 설정되어 있다면 '모터 ID 초기화'를 사용하여 ID 1로 리셋한 후 다시 설정하세요.",
+			"motor_setup.skip": "건너뛰기",
+			"motor_setup.progress": "진행률",
+			"motor_setup.reset": "초기화",
 			"label.robot_status": "로봇 상태:",
 			"label.port": "포트:",
 			"label.baudrate": "보드레이트:",
@@ -135,6 +159,7 @@
 		en: {
 			"menu.tutorial": "Tutorial",
 			"menu.connection": "Connection",
+			"menu.motor_setup": "Motor Setup",
 			"menu.calibration": "Calibration",
 			"menu.control": "Control",
 			"menu.status": "Status",
@@ -152,6 +177,29 @@
 			"section.control.description": "Control robot with keyboard",
 			"section.status.title": "Robot Status",
 			"section.status.description": "Real-time robot status monitoring",
+			"section.motor_setup.title": "Motor Setup",
+			"section.motor_setup.description": "Configure motor IDs and baudrate for SO-100 robot",
+			"card.motor_setup_wizard": "Motor Setup Wizard",
+			"motor_setup.step1.title": "Step 1: Select Robot Type",
+			"motor_setup.step1.description": "Choose whether you're configuring a follower or leader arm.",
+			"motor_setup.step2.title": "Step 2: Find MotorsBus Port",
+			"motor_setup.step2.description": "Disconnect the USB cable from your MotorsBus and click the button below.",
+			"motor_setup.step3.title": "Step 3: Configure Motors",
+			"motor_setup.step3.description": "Configure each motor one by one. Connect only one motor at a time. Click on any motor in the list to select it.",
+			"motor_setup.follower": "Follower Arm",
+			"motor_setup.leader": "Leader Arm",
+			"motor_setup.find_port": "Find Port",
+			"motor_setup.port_found": "Port Found:",
+			"motor_setup.reconnect_cable": "Please reconnect the USB cable now.",
+			"motor_setup.current_motor": "Current Motor:",
+			"motor_setup.connect_single_motor": "Make sure only this motor is connected to the controller board.",
+			"motor_setup.configure_motor": "Configure Motor",
+			"motor_setup.check_id": "Check Motor ID",
+			"motor_setup.reset_motor": "Reset Motor ID",
+			"motor_setup.reset_motor_hint": "If a motor is already configured, use 'Reset Motor ID' to reset it to ID 1, then configure it again.",
+			"motor_setup.skip": "Skip",
+			"motor_setup.progress": "Progress",
+			"motor_setup.reset": "Reset",
 			"label.robot_status": "Robot Status:",
 			"label.port": "Port:",
 			"label.baudrate": "Baudrate:",
@@ -1466,4 +1514,428 @@
 	});
 
 	// 언어는 이미 Initialize에서 적용됨
+
+	// ========== Motor Setup ==========
+	let motorSetupState = {
+		robotType: null,
+		port: null,
+		currentMotorIndex: 0,
+		motors: [],
+		configuredMotors: new Set()
+	};
+
+	// Motor Setup DOM Elements
+	const motorSetupFollowerBtn = document.getElementById("motor-setup-follower-btn");
+	const motorSetupLeaderBtn = document.getElementById("motor-setup-leader-btn");
+	const motorSetupFindPortBtn = document.getElementById("motor-setup-find-port-btn");
+	const motorSetupConfigureBtn = document.getElementById("motor-setup-configure-btn");
+	const motorSetupCheckIdBtn = document.getElementById("motor-setup-check-id-btn");
+	const motorSetupResetMotorBtn = document.getElementById("motor-setup-reset-motor-btn");
+	const motorSetupSkipBtn = document.getElementById("motor-setup-skip-btn");
+	const motorSetupResetBtn = document.getElementById("motor-setup-reset-btn");
+	const motorSetupStep1 = document.getElementById("motor-setup-step-1");
+	const motorSetupStep2 = document.getElementById("motor-setup-step-2");
+	const motorSetupStep3 = document.getElementById("motor-setup-step-3");
+	const motorSetupMotorsList = document.getElementById("motor-setup-motors-list");
+	const motorSetupCurrentMotor = document.getElementById("motor-setup-current-motor");
+	const motorSetupCurrentMotorName = document.getElementById("motor-setup-current-motor-name");
+	const motorSetupPortResult = document.getElementById("motor-setup-port-result");
+	const motorSetupPortValue = document.getElementById("motor-setup-port-value");
+	const motorSetupProgress = document.getElementById("motor-setup-progress");
+	const motorSetupProgressText = document.getElementById("motor-setup-progress-text");
+	const motorSetupProgressBar = document.getElementById("motor-setup-progress-bar");
+	const motorSetupStatus = document.getElementById("motor-setup-status");
+	const motorSetupIdResult = document.getElementById("motor-setup-id-result");
+	const motorSetupIdResultText = document.getElementById("motor-setup-id-result-text");
+
+	// Motor Setup: Start (Robot Type Selection)
+	if (motorSetupFollowerBtn) {
+		motorSetupFollowerBtn.addEventListener("click", async () => {
+			await startMotorSetup("follower");
+		});
+	}
+
+	if (motorSetupLeaderBtn) {
+		motorSetupLeaderBtn.addEventListener("click", async () => {
+			await startMotorSetup("leader");
+		});
+	}
+
+	async function startMotorSetup(robotType) {
+		try {
+			const response = await fetch("/api/setup/start", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ robot_type: robotType })
+			});
+			const data = await response.json();
+			
+			if (data.ok) {
+				motorSetupState.robotType = robotType;
+				motorSetupState.motors = data.motors || [];
+				motorSetupState.configuredMotors.clear();
+				motorSetupState.currentMotorIndex = 0;
+				
+				// Show step 2
+				motorSetupStep1.style.display = "none";
+				motorSetupStep2.style.display = "block";
+				
+				showMotorSetupStatus("success", `Motor setup started for ${robotType} arm`);
+			} else {
+				showMotorSetupStatus("error", data.error || "Failed to start motor setup");
+			}
+		} catch (error) {
+			showMotorSetupStatus("error", `Error: ${error.message}`);
+		}
+	}
+
+	// Motor Setup: Find Port
+	if (motorSetupFindPortBtn) {
+		motorSetupFindPortBtn.addEventListener("click", async () => {
+			try {
+				motorSetupFindPortBtn.disabled = true;
+				motorSetupFindPortBtn.textContent = "Finding...";
+				
+				// Get ports before
+				const portsBeforeRes = await fetch("/api/setup/ports-before");
+				const portsBeforeData = await portsBeforeRes.json();
+				
+				if (!portsBeforeData.ok) {
+					throw new Error("Failed to get ports");
+				}
+				
+			// Try to find port (will try PID first, then disconnect method if needed)
+			// Note: If PID method fails, user may need to disconnect USB cable
+				const findPortRes = await fetch("/api/setup/find-port", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ ports_before: portsBeforeData.ports })
+				});
+				
+				const findPortData = await findPortRes.json();
+				
+				if (findPortData.ok) {
+					motorSetupState.port = findPortData.port;
+					motorSetupPortValue.textContent = findPortData.port;
+					motorSetupPortResult.style.display = "block";
+					
+					// Show method used
+					const methodText = document.getElementById("motor-setup-port-method");
+					if (methodText) {
+						if (findPortData.method === "pid") {
+							methodText.textContent = "✓ Found automatically (no USB disconnection needed)";
+							methodText.style.color = "var(--success)";
+						} else {
+							methodText.textContent = "Please reconnect the USB cable now.";
+							methodText.style.color = "var(--text-secondary)";
+						}
+					}
+					
+					// Show step 3
+					motorSetupStep2.style.display = "none";
+					motorSetupStep3.style.display = "block";
+					motorSetupProgress.style.display = "block";
+					
+					renderMotorsList();
+					updateCurrentMotor();
+					
+					showMotorSetupStatus("success", `Port found: ${findPortData.port} (method: ${findPortData.method || "unknown"})`);
+				} else {
+					throw new Error(findPortData.detail || "Failed to find port");
+				}
+			} catch (error) {
+				showMotorSetupStatus("error", `Error: ${error.message}`);
+			} finally {
+				motorSetupFindPortBtn.disabled = false;
+				motorSetupFindPortBtn.innerHTML = "<span>Find Port</span>";
+			}
+		});
+	}
+
+	function renderMotorsList() {
+		if (!motorSetupMotorsList) return;
+		
+		motorSetupMotorsList.innerHTML = "";
+		
+		motorSetupState.motors.forEach((motor, index) => {
+			const motorItem = document.createElement("div");
+			motorItem.className = "motor-item";
+			motorItem.style.cursor = "pointer";
+			motorItem.title = `Click to configure ${motor.name} (ID: ${motor.id})`;
+			
+			if (motorSetupState.configuredMotors.has(motor.id)) {
+				motorItem.classList.add("configured");
+			}
+			if (index === motorSetupState.currentMotorIndex) {
+				motorItem.classList.add("current");
+			}
+			
+			motorItem.innerHTML = `
+				<div>
+					<span class="motor-item-name">${motor.name}</span>
+					<span class="motor-item-id"> (ID: ${motor.id})</span>
+				</div>
+				<span class="motor-item-status ${motorSetupState.configuredMotors.has(motor.id) ? 'configured' : 'pending'}">
+					${motorSetupState.configuredMotors.has(motor.id) ? '✓ Configured' : 'Pending'}
+				</span>
+			`;
+			
+			// 클릭 이벤트: 해당 모터로 이동
+			motorItem.addEventListener("click", () => {
+				motorSetupState.currentMotorIndex = index;
+				updateCurrentMotor();
+			});
+			
+			motorSetupMotorsList.appendChild(motorItem);
+		});
+	}
+
+	function updateCurrentMotor() {
+		if (motorSetupState.motors.length === 0) return;
+		
+		// Always update progress first (even if no current motor)
+		const progress = (motorSetupState.configuredMotors.size / motorSetupState.motors.length) * 100;
+		motorSetupProgressBar.style.width = `${progress}%`;
+		motorSetupProgressText.textContent = `${motorSetupState.configuredMotors.size} / ${motorSetupState.motors.length}`;
+		
+		// Update current motor display
+		const currentMotor = motorSetupState.motors[motorSetupState.currentMotorIndex];
+		if (!currentMotor) {
+			motorSetupCurrentMotor.style.display = "none";
+			// Still render motors list to show all configured motors
+			renderMotorsList();
+			return;
+		}
+		
+		motorSetupCurrentMotorName.textContent = `${currentMotor.name} (ID: ${currentMotor.id})`;
+		motorSetupCurrentMotor.style.display = "block";
+		
+		renderMotorsList();
+	}
+
+	// Motor Setup: Configure Motor
+	if (motorSetupConfigureBtn) {
+		motorSetupConfigureBtn.addEventListener("click", async () => {
+			if (!motorSetupState.port || motorSetupState.motors.length === 0) {
+				showMotorSetupStatus("error", "Port or motors not set");
+				return;
+			}
+			
+			const currentMotor = motorSetupState.motors[motorSetupState.currentMotorIndex];
+			if (!currentMotor) {
+				showMotorSetupStatus("error", "No motor to configure");
+				return;
+			}
+			
+			try {
+				motorSetupConfigureBtn.disabled = true;
+				motorSetupConfigureBtn.innerHTML = "<span>Configuring...</span>";
+				
+				const response = await fetch("/api/setup/motor", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						port: motorSetupState.port,
+						motor_id: currentMotor.id,
+						baudrate: 1000000
+					})
+				});
+				
+				const data = await response.json();
+				
+				if (data.ok) {
+					motorSetupState.configuredMotors.add(currentMotor.id);
+					showMotorSetupStatus("success", `Motor ${currentMotor.name} (ID: ${currentMotor.id}) configured successfully`);
+					
+					// Update progress immediately (before moving to next motor)
+					updateCurrentMotor();
+					
+					// Move to next motor
+					motorSetupState.currentMotorIndex++;
+					if (motorSetupState.currentMotorIndex >= motorSetupState.motors.length) {
+						// All motors configured
+						showMotorSetupStatus("success", "All motors configured successfully!");
+						motorSetupCurrentMotor.style.display = "none";
+						// Final progress update to show 6/6
+						updateCurrentMotor();
+					}
+				} else {
+					throw new Error(data.detail || "Failed to configure motor");
+				}
+			} catch (error) {
+				showMotorSetupStatus("error", `Error: ${error.message}`);
+			} finally {
+				motorSetupConfigureBtn.disabled = false;
+				motorSetupConfigureBtn.innerHTML = "<span>Configure Motor</span>";
+			}
+		});
+	}
+
+	// Motor Setup: Check Motor ID
+	if (motorSetupCheckIdBtn) {
+		motorSetupCheckIdBtn.addEventListener("click", async () => {
+			if (!motorSetupState.port) {
+				showMotorSetupStatus("error", "Port not set. Please find the port first.");
+				return;
+			}
+
+			try {
+				motorSetupCheckIdBtn.disabled = true;
+				motorSetupCheckIdBtn.innerHTML = "<span>Checking...</span>";
+				motorSetupIdResult.style.display = "none";
+
+				const response = await fetch("/api/setup/check-motor-id", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						port: motorSetupState.port
+					})
+				});
+
+				const data = await response.json();
+
+				if (data.ok) {
+					if (data.warning) {
+						// 여러 모터가 감지된 경우
+						motorSetupIdResult.style.display = "block";
+						motorSetupIdResult.style.background = "rgba(251, 191, 36, 0.1)";
+						motorSetupIdResult.style.border = "1px solid var(--warning)";
+						motorSetupIdResultText.style.color = "var(--warning)";
+						motorSetupIdResultText.textContent = `${data.warning} Detected motors: ${data.motors.map(m => `ID ${m.id} (baudrate: ${m.baudrate})`).join(", ")}`;
+					} else if (data.motor_id !== undefined) {
+						// 단일 모터가 감지된 경우
+						motorSetupIdResult.style.display = "block";
+						motorSetupIdResult.style.background = "rgba(34, 197, 94, 0.1)";
+						motorSetupIdResult.style.border = "1px solid var(--success)";
+						motorSetupIdResultText.style.color = "var(--success)";
+						motorSetupIdResultText.textContent = `Motor ID: ${data.motor_id} (Baudrate: ${data.baudrate})`;
+					}
+				} else {
+					throw new Error(data.detail || "Failed to check motor ID");
+				}
+			} catch (error) {
+				motorSetupIdResult.style.display = "block";
+				motorSetupIdResult.style.background = "rgba(239, 68, 68, 0.1)";
+				motorSetupIdResult.style.border = "1px solid var(--error)";
+				motorSetupIdResultText.style.color = "var(--error)";
+				motorSetupIdResultText.textContent = `Error: ${error.message}`;
+			} finally {
+				motorSetupCheckIdBtn.disabled = false;
+				motorSetupCheckIdBtn.innerHTML = "<span data-i18n=\"motor_setup.check_id\">Check Motor ID</span>";
+				applyLanguage(); // 번역 다시 적용
+			}
+		});
+	}
+
+	// Motor Setup: Reset Motor ID
+	if (motorSetupResetMotorBtn) {
+		motorSetupResetMotorBtn.addEventListener("click", async () => {
+			if (!motorSetupState.port || motorSetupState.motors.length === 0) {
+				showMotorSetupStatus("error", "Port or motors not set");
+				return;
+			}
+			
+			const currentMotor = motorSetupState.motors[motorSetupState.currentMotorIndex];
+			if (!currentMotor) {
+				showMotorSetupStatus("error", "No motor to reset");
+				return;
+			}
+			
+			if (!confirm(`Reset motor ${currentMotor.name} (ID: ${currentMotor.id}) to ID 1?`)) {
+				return;
+			}
+			
+			try {
+				motorSetupResetMotorBtn.disabled = true;
+				motorSetupResetMotorBtn.innerHTML = "<span>Resetting...</span>";
+				
+				const response = await fetch("/api/setup/reset-motor", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						port: motorSetupState.port,
+						target_id: currentMotor.id,
+						reset_to_id: 1,
+						baudrate: 1000000
+					})
+				});
+				
+				const data = await response.json();
+				
+				if (data.ok) {
+					showMotorSetupStatus("success", `Motor ID reset from ${data.old_id} to ${data.new_id}. You can now configure it again.`);
+					// Remove from configured motors if it was configured
+					motorSetupState.configuredMotors.delete(currentMotor.id);
+					updateCurrentMotor();
+				} else {
+					throw new Error(data.detail || "Failed to reset motor");
+				}
+			} catch (error) {
+				showMotorSetupStatus("error", `Error: ${error.message}`);
+			} finally {
+				motorSetupResetMotorBtn.disabled = false;
+				motorSetupResetMotorBtn.innerHTML = "<span>Reset Motor ID</span>";
+			}
+		});
+	}
+
+	// Motor Setup: Skip Motor
+	if (motorSetupSkipBtn) {
+		motorSetupSkipBtn.addEventListener("click", () => {
+			motorSetupState.currentMotorIndex++;
+			if (motorSetupState.currentMotorIndex >= motorSetupState.motors.length) {
+				motorSetupCurrentMotor.style.display = "none";
+			} else {
+				updateCurrentMotor();
+			}
+		});
+	}
+
+	// Motor Setup: Reset
+	if (motorSetupResetBtn) {
+		motorSetupResetBtn.addEventListener("click", async () => {
+			try {
+				await fetch("/api/setup/reset", { method: "POST" });
+				motorSetupState = {
+					robotType: null,
+					port: null,
+					currentMotorIndex: 0,
+					motors: [],
+					configuredMotors: new Set()
+				};
+				
+				motorSetupStep1.style.display = "block";
+				motorSetupStep2.style.display = "none";
+				motorSetupStep3.style.display = "none";
+				motorSetupPortResult.style.display = "none";
+				motorSetupCurrentMotor.style.display = "none";
+				motorSetupProgress.style.display = "none";
+				motorSetupStatus.style.display = "none";
+				
+				showMotorSetupStatus("info", "Motor setup reset");
+			} catch (error) {
+				showMotorSetupStatus("error", `Error: ${error.message}`);
+			}
+		});
+	}
+
+	function showMotorSetupStatus(type, message) {
+		if (!motorSetupStatus) return;
+		
+		motorSetupStatus.style.display = "block";
+		motorSetupStatus.className = "";
+		motorSetupStatus.classList.add(`log-entry`, type);
+		motorSetupStatus.textContent = message;
+		
+		if (type === "success") {
+			motorSetupStatus.style.background = "rgba(34, 197, 94, 0.1)";
+			motorSetupStatus.style.color = "var(--success)";
+		} else if (type === "error") {
+			motorSetupStatus.style.background = "rgba(239, 68, 68, 0.1)";
+			motorSetupStatus.style.color = "var(--error)";
+		} else {
+			motorSetupStatus.style.background = "rgba(96, 165, 250, 0.1)";
+			motorSetupStatus.style.color = "#60a5fa";
+		}
+	}
 })();

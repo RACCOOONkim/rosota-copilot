@@ -1,9 +1,11 @@
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 import numpy as np
 from ..config import CALIBRATION_DIR
 from ..robot.usb_scanner import detect_robot_port, scan_serial_ports
+from ..robot.motor_setup import SetupStatus
+import serial.tools.list_ports
 
 api_router = APIRouter()
 
@@ -377,6 +379,258 @@ async def control_status(request: Request):
 		keyboard_controller = request.app.state.keyboard_controller
 		status = keyboard_controller.get_status()
 		return {"ok": True, "status": status}
+	except Exception as e:
+		raise HTTPException(status_code=500, detail=str(e))
+
+
+# ========== Motor Setup API ==========
+
+class FindPortRequest(BaseModel):
+	ports_before: List[str]
+
+
+class ConfigureMotorRequest(BaseModel):
+	port: str
+	motor_id: int
+	baudrate: Optional[int] = None
+
+
+class SetupStartRequest(BaseModel):
+	robot_type: str  # "follower" or "leader"
+
+
+class ResetMotorRequest(BaseModel):
+	port: str
+	target_id: int
+	reset_to_id: Optional[int] = 1
+	baudrate: Optional[int] = None
+
+
+class CheckMotorIdRequest(BaseModel):
+	port: str
+	baudrate: Optional[int] = None
+
+
+@api_router.post("/setup/find-port")
+async def find_port(req: FindPortRequest, request: Request):
+	"""포트 찾기 (LeRobot 방식: 연결 전후 비교 또는 PID 기반)"""
+	try:
+		motor_setup_manager = request.app.state.motor_setup_manager
+		
+		# 먼저 PID 기반으로 찾기 시도 (USB 케이블 분리 불필요)
+		port = motor_setup_manager.find_port_by_pid()
+		
+		if port:
+			# PID 기반으로 찾았으면 바로 사용
+			motor_setup_manager.current_port = port
+			motor_setup_manager.status = SetupStatus.PORT_FOUND
+			return {
+				"ok": True,
+				"port": port,
+				"method": "pid",
+				"message": f"Port found by PID: {port} (No need to disconnect USB cable)"
+			}
+		
+		# PID 기반 실패 시 LeRobot 방식 (USB 케이블 분리 필요)
+		import asyncio
+		loop = asyncio.get_event_loop()
+		port = await loop.run_in_executor(
+			None,
+			motor_setup_manager.find_port_by_disconnect,
+			req.ports_before
+		)
+		
+		motor_setup_manager.current_port = port
+		motor_setup_manager.status = SetupStatus.PORT_FOUND
+		
+		return {
+			"ok": True,
+			"port": port,
+			"method": "disconnect",
+			"message": f"Port found by disconnect method: {port}"
+		}
+	except Exception as e:
+		import traceback
+		traceback.print_exc()
+		raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/setup/motor")
+async def configure_motor(req: ConfigureMotorRequest, request: Request):
+	"""단일 모터 설정"""
+	try:
+		motor_setup_manager = request.app.state.motor_setup_manager
+		baudrate = req.baudrate or motor_setup_manager.BAUDRATE
+		
+		# 비동기로 실행
+		import asyncio
+		loop = asyncio.get_event_loop()
+		result = await loop.run_in_executor(
+			None,
+			motor_setup_manager.configure_single_motor,
+			req.port,
+			req.motor_id,
+			baudrate
+		)
+		
+		if result["success"]:
+			return {
+				"ok": True,
+				"motor_id": result["motor_id"],
+				"found_index": result.get("found_index"),
+				"baudrate": result["baudrate"],
+				"message": f"Motor {result['motor_id']} configured successfully"
+			}
+		else:
+			raise HTTPException(
+				status_code=500,
+				detail=result.get("error", "Motor configuration failed")
+			)
+	except HTTPException:
+		raise
+	except Exception as e:
+		import traceback
+		traceback.print_exc()
+		raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/setup/reset-motor")
+async def reset_motor(req: ResetMotorRequest, request: Request):
+	"""모터 ID 리셋 (기본값으로 초기화)"""
+	try:
+		motor_setup_manager = request.app.state.motor_setup_manager
+		baudrate = req.baudrate or motor_setup_manager.BAUDRATE
+		
+		# 비동기로 실행
+		import asyncio
+		loop = asyncio.get_event_loop()
+		result = await loop.run_in_executor(
+			None,
+			motor_setup_manager.reset_motor_id,
+			req.port,
+			req.target_id,
+			req.reset_to_id or 1,
+			baudrate
+		)
+		
+		if result["success"]:
+			return {
+				"ok": True,
+				"old_id": result["old_id"],
+				"new_id": result["new_id"],
+				"message": result["message"]
+			}
+		else:
+			raise HTTPException(
+				status_code=500,
+				detail=result.get("error", "Motor reset failed")
+			)
+	except HTTPException:
+		raise
+	except Exception as e:
+		import traceback
+		traceback.print_exc()
+		raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/setup/check-motor-id")
+async def check_motor_id(req: CheckMotorIdRequest, request: Request):
+	"""연결된 모터의 ID 확인"""
+	try:
+		motor_setup_manager = request.app.state.motor_setup_manager
+		baudrate = req.baudrate or motor_setup_manager.BAUDRATE
+		
+		# 비동기로 실행
+		import asyncio
+		loop = asyncio.get_event_loop()
+		result = await loop.run_in_executor(
+			None,
+			motor_setup_manager.check_motor_id,
+			req.port,
+			baudrate
+		)
+		
+		if result["success"]:
+			return {
+				"ok": True,
+				"motor_id": result.get("motor_id"),
+				"baudrate": result.get("baudrate"),
+				"motors": result.get("motors"),
+				"warning": result.get("warning")
+			}
+		else:
+			raise HTTPException(
+				status_code=500,
+				detail=result.get("error", "Failed to check motor ID")
+			)
+	except HTTPException:
+		raise
+	except Exception as e:
+		import traceback
+		traceback.print_exc()
+		raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/setup/start")
+async def setup_start(req: SetupStartRequest, request: Request):
+	"""모터 설정 시작"""
+	try:
+		# 모터 설정 시작 시 로봇 연결 자동 해제 (포트 충돌 방지)
+		robot_adapter = request.app.state.robot_adapter
+		if robot_adapter.connected:
+			robot_adapter.disconnect()
+		
+		motor_setup_manager = request.app.state.motor_setup_manager
+		motor_setup_manager.reset()
+		motor_setup_manager.robot_type = req.robot_type
+		motor_setup_manager.status = SetupStatus.IDLE
+		
+		return {
+			"ok": True,
+			"robot_type": req.robot_type,
+			"motors": motor_setup_manager.get_motor_list(req.robot_type),
+			"message": f"Motor setup started for {req.robot_type}. Robot connection has been disconnected to avoid port conflicts."
+		}
+	except Exception as e:
+		raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/setup/status")
+async def setup_status(request: Request):
+	"""모터 설정 상태 조회"""
+	try:
+		motor_setup_manager = request.app.state.motor_setup_manager
+		return {
+			"ok": True,
+			**motor_setup_manager.get_status()
+		}
+	except Exception as e:
+		raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/setup/reset")
+async def setup_reset(request: Request):
+	"""모터 설정 초기화"""
+	try:
+		motor_setup_manager = request.app.state.motor_setup_manager
+		motor_setup_manager.reset()
+		return {
+			"ok": True,
+			"message": "Motor setup reset"
+		}
+	except Exception as e:
+		raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/setup/ports-before")
+async def get_ports_before():
+	"""포트 찾기 전 포트 목록 반환"""
+	try:
+		ports = [p.device for p in serial.tools.list_ports.comports()]
+		return {
+			"ok": True,
+			"ports": ports
+		}
 	except Exception as e:
 		raise HTTPException(status_code=500, detail=str(e))
 

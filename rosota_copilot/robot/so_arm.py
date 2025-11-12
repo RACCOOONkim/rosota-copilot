@@ -5,6 +5,13 @@ import numpy as np
 import os
 from ..config import DEFAULT_CONFIG
 
+try:
+	from loguru import logger
+except ImportError:
+	import logging
+	logging.basicConfig(level=logging.INFO)
+	logger = logging.getLogger(__name__)
+
 # SO-100은 Feetech 모터를 사용하며 FeetechMotorsBus를 사용합니다
 # phosphobot의 구현을 참고
 try:
@@ -212,8 +219,34 @@ class SOArm100Adapter:
 			# 대신 zero_joints에서 FeetechMotorsBus의 캘리브레이션을 업데이트해야 함
 			return degrees
 			
+		except ConnectionError as e:
+			error_msg = str(e)
+			# "Port is in use!" 에러는 모터 설정 중이거나 다른 프로세스가 포트를 사용 중일 때 발생
+			if "port is in use" in error_msg.lower():
+				# WARNING 레벨로 낮춰서 로그 스팸 방지
+				# 모터 설정 중에는 정상적인 상황이므로 ERROR로 표시하지 않음
+				logger.debug(
+					f"Joint {joint_index} ({motor_name}): Port is in use. "
+					f"This is normal during motor setup or when another process is using the port."
+				)
+			# "There is no status packet!" 에러에 대한 상세 정보 제공
+			elif "no status packet" in error_msg.lower():
+				motor_id, _ = self.motors_bus.motors.get(motor_name, (None, None))
+				logger.warning(
+					f"Joint {joint_index} ({motor_name}, ID: {motor_id}) not responding. "
+					f"Possible causes:\n"
+					f"  1. Motor ID mismatch (expected ID: {motor_id})\n"
+					f"  2. Motor power is off\n"
+					f"  3. Wiring/connection issue\n"
+					f"  4. Motor is damaged\n"
+					f"  5. Baudrate mismatch\n"
+					f"Consider running motor setup to reconfigure motor IDs."
+				)
+			else:
+				logger.error(f"Error reading joint {joint_index} ({motor_name}): {e}")
+			return None
 		except Exception as e:
-			print(f"Error reading joint {joint_index}: {e}")
+			logger.error(f"Error reading joint {joint_index} ({motor_name}): {e}")
 			import traceback
 			traceback.print_exc()
 			return None

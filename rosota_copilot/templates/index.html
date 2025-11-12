@@ -668,6 +668,86 @@
 			transform: scale(1.1);
 		}
 
+		/* Motor Setup Styles */
+		.motor-setup-step {
+			margin-bottom: 32px;
+		}
+
+		.motor-setup-step h3 {
+			font-size: 18px;
+			font-weight: 600;
+			margin-bottom: 8px;
+			color: var(--text-primary);
+		}
+
+		.motor-setup-step p {
+			color: var(--text-secondary);
+			margin-bottom: 16px;
+		}
+
+		.motor-item {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			padding: 12px 16px;
+			background: var(--bg-secondary);
+			border-radius: 8px;
+			margin-bottom: 8px;
+			cursor: pointer;
+			transition: all 0.2s ease;
+		}
+
+		.motor-item:hover {
+			background: rgba(59, 130, 246, 0.15);
+			transform: translateX(4px);
+			box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+		}
+
+		.motor-item.configured {
+			background: rgba(34, 197, 94, 0.1);
+			border: 1px solid var(--success);
+		}
+
+		.motor-item.configured:hover {
+			background: rgba(34, 197, 94, 0.2);
+		}
+
+		.motor-item.current {
+			background: rgba(59, 130, 246, 0.1);
+			border: 1px solid var(--accent);
+		}
+
+		.motor-item.current:hover {
+			background: rgba(59, 130, 246, 0.2);
+		}
+
+		.motor-item-name {
+			font-weight: 600;
+			color: var(--text-primary);
+		}
+
+		.motor-item-id {
+			color: var(--text-secondary);
+			font-size: 13px;
+		}
+
+		.motor-item-status {
+			font-size: 12px;
+			padding: 4px 8px;
+			border-radius: 4px;
+			background: var(--bg-primary);
+		}
+
+		.motor-item-status.configured {
+			background: var(--success);
+			color: white;
+		}
+
+		.motor-item-status.pending {
+			background: var(--warning);
+			color: white;
+		}
+
 		/* 키보드 단축키 가이드 모달 */
 		.shortcuts-modal {
 			position: fixed;
@@ -1166,6 +1246,10 @@
 				<span class="menu-item-icon">🔌</span>
 				<span data-i18n="menu.connection">Connection</span>
 			</div>
+			<div class="menu-item" data-section="motor-setup">
+				<span class="menu-item-icon">⚙️</span>
+				<span data-i18n="menu.motor_setup">Motor Setup</span>
+			</div>
 			<div class="menu-item" data-section="calibration">
 				<span class="menu-item-icon">🎯</span>
 				<span data-i18n="menu.calibration">Calibration</span>
@@ -1266,6 +1350,112 @@
 						<span class="tutorial-dot" data-page="3"></span>
 					</div>
 					<button class="btn" id="tutorial-page-next">다음 &gt;</button>
+				</div>
+			</div>
+		</div>
+		
+		<!-- Motor Setup Section -->
+		<div class="content-section" id="section-motor-setup">
+			<div class="section-header">
+				<h2 data-i18n="section.motor_setup.title">Motor Setup</h2>
+				<p data-i18n="section.motor_setup.description">Configure motor IDs and baudrate for SO-100 robot</p>
+			</div>
+			
+			<div class="card">
+				<div class="card-title" data-i18n="card.motor_setup_wizard">Motor Setup Wizard</div>
+				
+				<!-- Step 1: Robot Type Selection -->
+				<div id="motor-setup-step-1" class="motor-setup-step">
+					<h3 data-i18n="motor_setup.step1.title">Step 1: Select Robot Type</h3>
+					<p data-i18n="motor_setup.step1.description">Choose whether you're configuring a follower or leader arm.</p>
+					<div class="btn-group" style="margin-top: 16px;">
+						<button class="btn" id="motor-setup-follower-btn" data-robot-type="follower">
+							<span data-i18n="motor_setup.follower">Follower Arm</span>
+						</button>
+						<button class="btn" id="motor-setup-leader-btn" data-robot-type="leader">
+							<span data-i18n="motor_setup.leader">Leader Arm</span>
+						</button>
+					</div>
+				</div>
+				
+				<!-- Step 2: Port Finding -->
+				<div id="motor-setup-step-2" class="motor-setup-step" style="display: none;">
+					<h3 data-i18n="motor_setup.step2.title">Step 2: Find MotorsBus Port</h3>
+					<p data-i18n="motor_setup.step2.description">The system will try to find the port automatically. If it fails, you may need to disconnect the USB cable temporarily.</p>
+					<div style="margin-top: 16px; padding: 12px; background: rgba(59, 130, 246, 0.1); border-left: 3px solid var(--accent); border-radius: 4px;">
+						<p style="font-size: 13px; color: var(--text-secondary); margin: 0;">
+							<strong>💡 Why disconnect USB?</strong><br>
+							When multiple USB devices are connected, disconnecting helps identify which port belongs to the MotorsBus by comparing port lists before and after disconnection.
+						</p>
+					</div>
+					<div class="btn-group" style="margin-top: 16px;">
+						<button class="btn" id="motor-setup-find-port-btn">
+							<span data-i18n="motor_setup.find_port">Find Port</span>
+						</button>
+					</div>
+					<div id="motor-setup-port-result" style="margin-top: 16px; padding: 12px; background: var(--bg-secondary); border-radius: 8px; display: none;">
+						<p><strong data-i18n="motor_setup.port_found">Port Found:</strong> <span id="motor-setup-port-value"></span></p>
+						<p id="motor-setup-port-method" style="margin-top: 8px; font-size: 13px; color: var(--text-secondary);"></p>
+					</div>
+				</div>
+				
+				<!-- Step 3: Motor Configuration -->
+				<div id="motor-setup-step-3" class="motor-setup-step" style="display: none;">
+					<h3 data-i18n="motor_setup.step3.title">Step 3: Configure Motors</h3>
+					<p data-i18n="motor_setup.step3.description">Configure each motor one by one. Connect only one motor at a time. Click on any motor in the list to select it.</p>
+					
+					<div id="motor-setup-motors-list" style="margin-top: 16px;">
+						<!-- Motors will be dynamically added here -->
+					</div>
+					
+					<div id="motor-setup-current-motor" style="margin-top: 24px; padding: 16px; background: var(--bg-secondary); border-radius: 8px; display: none;">
+						<h4 data-i18n="motor_setup.current_motor">Current Motor:</h4>
+						<p id="motor-setup-current-motor-name" style="font-weight: 600; margin-top: 8px;"></p>
+						<p style="margin-top: 8px; font-size: 13px; color: var(--text-secondary);" data-i18n="motor_setup.connect_single_motor">
+							Make sure only this motor is connected to the controller board.
+						</p>
+						<div class="btn-group" style="margin-top: 16px;">
+							<button class="btn" id="motor-setup-configure-btn">
+								<span data-i18n="motor_setup.configure_motor">Configure Motor</span>
+							</button>
+							<button class="btn btn-secondary" id="motor-setup-check-id-btn">
+								<span data-i18n="motor_setup.check_id">Check Motor ID</span>
+							</button>
+							<button class="btn btn-secondary" id="motor-setup-reset-motor-btn">
+								<span data-i18n="motor_setup.reset_motor">Reset Motor ID</span>
+							</button>
+							<button class="btn btn-secondary" id="motor-setup-skip-btn">
+								<span data-i18n="motor_setup.skip">Skip</span>
+							</button>
+						</div>
+						<div id="motor-setup-id-result" style="margin-top: 12px; padding: 12px; background: var(--bg-primary); border-radius: 6px; display: none;">
+							<p id="motor-setup-id-result-text" style="margin: 0; font-size: 14px;"></p>
+						</div>
+						<p style="margin-top: 12px; font-size: 12px; color: var(--text-secondary);" data-i18n="motor_setup.reset_motor_hint">
+							If a motor is already configured, use "Reset Motor ID" to reset it to ID 1, then configure it again.
+						</p>
+					</div>
+				</div>
+				
+				<!-- Progress -->
+				<div id="motor-setup-progress" style="margin-top: 24px; display: none;">
+					<div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+						<span data-i18n="motor_setup.progress">Progress</span>
+						<span id="motor-setup-progress-text">0 / 6</span>
+					</div>
+					<div style="height: 8px; background: var(--bg-secondary); border-radius: 4px; overflow: hidden;">
+						<div id="motor-setup-progress-bar" style="height: 100%; background: var(--accent); width: 0%; transition: width 0.3s;"></div>
+					</div>
+				</div>
+				
+				<!-- Status Messages -->
+				<div id="motor-setup-status" style="margin-top: 16px; padding: 12px; border-radius: 8px; display: none;"></div>
+				
+				<!-- Actions -->
+				<div class="btn-group" style="margin-top: 24px;">
+					<button class="btn btn-secondary" id="motor-setup-reset-btn" style="display: none;">
+						<span data-i18n="motor_setup.reset">Reset</span>
+					</button>
 				</div>
 			</div>
 		</div>
