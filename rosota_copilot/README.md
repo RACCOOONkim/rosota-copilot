@@ -255,7 +255,6 @@ rosota_copilot/
 
 ## 📝 라이선스
 
-이 프로젝트는 phosphobot의 SO-100 구현을 참고하여 개발되었습니다.
 
 ## 🙏 참고
 
