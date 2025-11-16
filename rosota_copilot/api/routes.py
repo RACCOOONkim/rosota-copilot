@@ -189,11 +189,65 @@ async def calibration_realtime(request: Request):
 	try:
 		calibration_manager = request.app.state.calibration_manager
 		status = calibration_manager.update_realtime_positions()
+		
+		# 프론트엔드가 기대하는 형식으로 변환
+		robot_adapter = request.app.state.robot_adapter
+		joint_names = []
+		if hasattr(robot_adapter, 'MOTORS') and isinstance(robot_adapter.MOTORS, dict):
+			joint_names = list(robot_adapter.MOTORS.keys())
+		elif hasattr(robot_adapter, 'JOINT_NAMES'):
+			joint_names = robot_adapter.JOINT_NAMES
+		else:
+			joint_names = ["shoulder_pan", "shoulder_lift", "elbow", "wrist_1", "wrist_2", "gripper"]
+		
+		# get_state()는 이미 도(degree) 단위로 반환함
+		# calibration.py의 update_realtime_positions()에서 get_state()를 호출하므로
+		# positions, min_positions, max_positions 모두 도 단위임
+		# 따라서 변환 불필요
+		import math
+		realtime_current_positions = []
+		if "positions" in status:
+			# positions는 이미 도 단위 (get_state()에서 도로 반환)
+			realtime_current_positions = [float(p) if p is not None else None for p in status["positions"]]
+		else:
+			realtime_current_positions = [float(p) if p is not None else None for p in status.get("realtime_positions", [0.0] * 6)]
+		
+		# min/max도 이미 도 단위 (get_state()에서 도로 반환)
+		realtime_min_positions = []
+		if "min_positions" in status:
+			realtime_min_positions = [float(p) if p is not None else None for p in status["min_positions"]]
+		else:
+			realtime_min_positions = [float(p) if p is not None else None for p in status.get("realtime_min", [None] * 6)]
+		
+		realtime_max_positions = []
+		if "max_positions" in status:
+			realtime_max_positions = [float(p) if p is not None else None for p in status["max_positions"]]
+		else:
+			realtime_max_positions = [float(p) if p is not None else None for p in status.get("realtime_max", [None] * 6)]
+		
+		# recorded_min/max는 record_joint_min/max에서 설정되는데,
+		# get_state()에서 도 단위로 받으므로 이미 도 단위임
+		recorded_min = [float(p) if p is not None else None for p in status.get("recorded_min", [None] * 6)]
+		recorded_max = [float(p) if p is not None else None for p in status.get("recorded_max", [None] * 6)]
+		
+		# 프론트엔드 형식으로 변환
+		formatted_status = {
+			"current_joint_index": status.get("current_joint_index", 0),
+			"joint_names": joint_names,
+			"realtime_current_positions": realtime_current_positions,
+			"realtime_min_positions": realtime_min_positions,
+			"realtime_max_positions": realtime_max_positions,
+			"recorded_min": recorded_min,
+			"recorded_max": recorded_max
+		}
+		
 		return {
 			"ok": True,
-			"status": status
+			"status": formatted_status
 		}
 	except Exception as e:
+		import traceback
+		traceback.print_exc()
 		raise HTTPException(status_code=500, detail=str(e))
 
 

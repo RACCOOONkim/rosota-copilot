@@ -1200,6 +1200,19 @@
 		if (data.joint_positions) {
 			updateJointDisplay(data.joint_positions);
 			updateSliders(data.joint_positions);
+			// 튜토리얼 페이지의 실시간 조인트 정보도 업데이트
+			// startTutorialRealtimeUpdate()가 이미 interval로 업데이트하고 있지만,
+			// state:update 이벤트가 더 빠르게 올 수 있으므로 여기서도 업데이트
+			if (tutorialWizardActive && tutorialWizardRealtimeInfo) {
+				const isVisible = tutorialWizardRealtimeInfo.style.display !== "none" && 
+				                  tutorialWizardRealtimeInfo.offsetParent !== null;
+				if (isVisible) {
+					// updateTutorialRealtimeInfoFromState는 API를 호출하므로,
+					// 대신 직접 updateTutorialRealtimePositions를 호출
+					// (이미 interval로 호출되고 있지만, 더 빠른 업데이트를 위해)
+					updateTutorialRealtimePositions();
+				}
+			}
 		}
 		// 조인트 제한 범위 처리
 		let limitsArray = null;
@@ -1628,15 +1641,20 @@
 	
 	// 실시간 정보 UI 업데이트
 	function updateRealtimeInfo(status) {
-		if (!wizardJointsList) return;
+		if (!wizardJointsList) {
+			console.warn("[Wizard] wizardJointsList not found");
+			return;
+		}
 		
-		const jointNames = ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll", "gripper"];
-		const positions = status.positions || [];
-		const realtimeMin = status.min_positions || [];
-		const realtimeMax = status.max_positions || [];
+		console.log("[Wizard] Updating realtime info:", status);
+		
+		const jointNames = status.joint_names || ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll", "gripper"];
+		const positions = status.realtime_current_positions || status.positions || [];
+		const realtimeMin = status.realtime_min_positions || status.min_positions || [];
+		const realtimeMax = status.realtime_max_positions || status.max_positions || [];
+		const currentJointIndex = status.current_joint_index !== undefined ? status.current_joint_index : -1;
 		const recordedMin = status.recorded_min || [];
 		const recordedMax = status.recorded_max || [];
-		const currentJointIndex = status.current_joint_index || 0;
 		
 		wizardJointsList.innerHTML = "";
 		
@@ -2081,11 +2099,13 @@
 	}
 	
 	function startTutorialRealtimeUpdate() {
+		console.log("[Tutorial] Starting realtime update interval");
 		stopTutorialRealtimeUpdate();
 		updateTutorialRealtimePositions();
 		tutorialRealtimeUpdateInterval = setInterval(() => {
 			updateTutorialRealtimePositions();
 		}, 100);
+		console.log("[Tutorial] Realtime update interval started:", tutorialRealtimeUpdateInterval);
 	}
 	
 	function stopTutorialRealtimeUpdate() {
@@ -2096,41 +2116,84 @@
 	}
 	
 	async function updateTutorialRealtimePositions() {
+		if (!tutorialWizardActive) {
+			console.log("[Tutorial] Realtime update skipped: wizard not active");
+			return;
+		}
+		
+		if (!tutorialWizardJointsList) {
+			console.warn("[Tutorial] Realtime update skipped: tutorialWizardJointsList not found");
+			return;
+		}
+		
 		try {
+			console.log("[Tutorial] Fetching realtime positions...");
 			const res = await fetch("/api/calibration/wizard/realtime");
 			const json = await res.json();
 			
+			console.log("[Tutorial] API response:", json);
+			
 			if (json.ok && json.status) {
+				console.log("[Tutorial] Realtime update received:", json.status);
 				updateTutorialRealtimeInfo(json.status);
+			} else {
+				console.warn("[Tutorial] Realtime update failed:", json);
 			}
 		} catch (error) {
-			console.error("Failed to update realtime positions:", error);
+			console.error("[Tutorial] Failed to update realtime positions:", error);
 		}
 	}
 	
 	function updateTutorialRealtimeInfo(status) {
-		if (!tutorialWizardJointsList) return;
+		if (!tutorialWizardJointsList) {
+			console.warn("[Tutorial] tutorialWizardJointsList not found");
+			return;
+		}
+		
+		console.log("[Tutorial] Updating realtime info:", status);
 		
 		tutorialWizardJointsList.innerHTML = "";
+		
+		const jointNames = status.joint_names || ["shoulder_pan", "shoulder_lift", "elbow", "wrist_1", "wrist_2", "gripper"];
+		const currentPositions = status.realtime_current_positions || [];
+		const minPositions = status.realtime_min_positions || [];
+		const maxPositions = status.realtime_max_positions || [];
+		const currentJointIndex = status.current_joint_index !== undefined ? status.current_joint_index : -1;
 		
 		for (let i = 0; i < 6; i++) {
 			const jointItem = document.createElement("div");
 			jointItem.style.padding = "8px";
 			jointItem.style.background = "var(--bg-secondary)";
 			jointItem.style.borderRadius = "4px";
+			jointItem.style.border = i === currentJointIndex ? "2px solid var(--accent)" : "1px solid var(--border)";
 			
-			const jointName = status.joint_names?.[i] || `Joint ${i + 1}`;
-			const current = status.realtime_current_positions?.[i] ?? 0;
-			const min = status.realtime_min_positions?.[i];
-			const max = status.realtime_max_positions?.[i];
+			const jointName = jointNames[i] || `Joint ${i + 1}`;
+			const current = currentPositions[i] !== undefined ? currentPositions[i] : null;
+			const min = minPositions[i] !== undefined ? minPositions[i] : null;
+			const max = maxPositions[i] !== undefined ? maxPositions[i] : null;
 			
-			let infoText = `<strong>${jointName}</strong><br>`;
-			infoText += `Current: ${current.toFixed(1)}°<br>`;
-			if (min !== null && min !== undefined) {
-				infoText += `Min: ${min.toFixed(1)}°<br>`;
+			let infoText = `<strong style="color: ${i === currentJointIndex ? 'var(--accent)' : 'var(--text-primary)'};">${jointName}</strong>`;
+			if (i === currentJointIndex) {
+				infoText += ` <span style="color: var(--accent); font-size: 10px;">← 측정 중</span>`;
 			}
+			infoText += `<br>`;
+			
+			if (current !== null && current !== undefined) {
+				infoText += `Current: <span style="font-weight: 600;">${current.toFixed(1)}°</span><br>`;
+			} else {
+				infoText += `Current: <span style="color: var(--text-secondary);">-</span><br>`;
+			}
+			
+			if (min !== null && min !== undefined) {
+				infoText += `Min: <span style="color: #60a5fa;">${min.toFixed(1)}°</span><br>`;
+			} else {
+				infoText += `Min: <span style="color: var(--text-secondary);">-</span><br>`;
+			}
+			
 			if (max !== null && max !== undefined) {
-				infoText += `Max: ${max.toFixed(1)}°`;
+				infoText += `Max: <span style="color: #60a5fa;">${max.toFixed(1)}°</span>`;
+			} else {
+				infoText += `Max: <span style="color: var(--text-secondary);">-</span>`;
 			}
 			
 			jointItem.innerHTML = infoText;
@@ -2138,6 +2201,50 @@
 			jointItem.style.color = "var(--text-primary)";
 			
 			tutorialWizardJointsList.appendChild(jointItem);
+		}
+		
+		console.log("[Tutorial] Realtime info updated successfully");
+	}
+	
+	// state:update 이벤트에서 받은 데이터로 튜토리얼 실시간 정보 업데이트
+	// 캘리브레이션 마법사가 활성화되어 있을 때만 업데이트
+	async function updateTutorialRealtimeInfoFromState(data) {
+		if (!tutorialWizardJointsList || !data.joint_positions || !tutorialWizardActive) return;
+		
+		// 캘리브레이션 마법사 상태를 API에서 가져와서 min/max 정보도 표시
+		try {
+			const res = await fetch("/api/calibration/wizard/realtime");
+			const json = await res.json();
+			
+			if (json.ok && json.status) {
+				// API에서 받은 상태 정보 사용 (min/max 포함)
+				updateTutorialRealtimeInfo(json.status);
+			} else {
+				// API 실패 시 state:update 데이터만 사용
+				tutorialWizardJointsList.innerHTML = "";
+				const jointNames = ["shoulder_pan", "shoulder_lift", "elbow", "wrist_1", "wrist_2", "gripper"];
+				
+				for (let i = 0; i < 6; i++) {
+					const jointItem = document.createElement("div");
+					jointItem.style.padding = "8px";
+					jointItem.style.background = "var(--bg-secondary)";
+					jointItem.style.borderRadius = "4px";
+					
+					const jointName = jointNames[i] || `Joint ${i + 1}`;
+					const current = data.joint_positions[i] ?? 0;
+					
+					let infoText = `<strong>${jointName}</strong><br>`;
+					infoText += `Current: ${(current * 180 / Math.PI).toFixed(1)}°`;
+					
+					jointItem.innerHTML = infoText;
+					jointItem.style.fontSize = "12px";
+					jointItem.style.color = "var(--text-primary)";
+					
+					tutorialWizardJointsList.appendChild(jointItem);
+				}
+			}
+		} catch (error) {
+			console.error("[Tutorial] Failed to update realtime info from state:", error);
 		}
 	}
 	
@@ -2161,13 +2268,18 @@
 			const res = await fetch("/api/control/start", { method: "POST" });
 			const json = await res.json();
 			if (json.ok) {
+				// 전역 controlRunning도 설정 (키보드 제어 루프가 이를 확인함)
+				controlRunning = true;
 				tutorialControlRunning = true;
 				tutorialStartControlBtn.disabled = true;
 				tutorialStopControlBtn.disabled = false;
-				tutorialControlStatusText.textContent = "Running";
-				tutorialControlStatusText.style.color = "var(--success)";
+				if (tutorialControlStatusText) {
+					tutorialControlStatusText.textContent = "Running";
+					tutorialControlStatusText.style.color = "var(--success)";
+				}
 				log("Keyboard control started", "success");
 				startControlLoop(); // 기존 제어 루프 사용
+				console.log("[Tutorial] Control started, controlRunning:", controlRunning);
 			} else {
 				log(`Failed to start control: ${json.detail || json.message}`, "error");
 			}
@@ -2185,13 +2297,18 @@
 			const res = await fetch("/api/control/stop", { method: "POST" });
 			const json = await res.json();
 			if (json.ok) {
+				// 전역 controlRunning도 설정 (키보드 제어 루프가 이를 확인함)
+				controlRunning = false;
 				tutorialControlRunning = false;
 				tutorialStartControlBtn.disabled = false;
 				tutorialStopControlBtn.disabled = true;
-				tutorialControlStatusText.textContent = "Stopped";
-				tutorialControlStatusText.style.color = "var(--text-secondary)";
+				if (tutorialControlStatusText) {
+					tutorialControlStatusText.textContent = "Stopped";
+					tutorialControlStatusText.style.color = "var(--text-secondary)";
+				}
 				log("Keyboard control stopped", "info");
-				stopControlLoop(); // 기존 제어 루프 사용
+				stopControlLoop(); // 기존 제어 루프 중지
+				console.log("[Tutorial] Control stopped, controlRunning:", controlRunning);
 			} else {
 				log(`Failed to stop control: ${json.detail || json.message}`, "error");
 			}
