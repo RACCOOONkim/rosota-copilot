@@ -63,19 +63,13 @@ async def connect_robot(req: ConnectRequest, request: Request):
 				# 캘리브레이션 파일이 없거나 로드 실패해도 연결은 성공
 				print(f"[API] Warning: Could not load calibration data: {e}")
 			
-			# 전압 정보 포함
-			voltage_info = {
-				"detected_voltage": getattr(robot_adapter, 'detected_voltage', None),
-				"config_loaded": robot_adapter.config is not None
-			}
 			return {
 				"ok": True,
 				"details": {
 					"port": port,
 					"host": host,
 					"baudrate": baud,
-					"status": "Connected",
-					**voltage_info
+					"status": "Connected"
 				}
 			}
 		else:

@@ -159,12 +159,15 @@ class CalibrationManager:
 		if "joint_ranges" in self.data and self.robot:
 			joint_ranges = self.data["joint_ranges"]
 			if "min" in joint_ranges and "max" in joint_ranges:
-				# joint_limits 업데이트 (각도 단위)
+				# joint_limits 업데이트 (각도 단위, min/max 정규화)
 				new_limits = []
 				for i in range(6):
 					min_val = joint_ranges["min"][i] if i < len(joint_ranges["min"]) else -180
 					max_val = joint_ranges["max"][i] if i < len(joint_ranges["max"]) else 180
-					new_limits.append([min_val, max_val])
+					# min/max 순서 정규화 (항상 min < max)
+					normalized_min = min(min_val, max_val)
+					normalized_max = max(min_val, max_val)
+					new_limits.append([normalized_min, normalized_max])
 				
 				if hasattr(self.robot, 'joint_limits'):
 					old_limits = self.robot.joint_limits.copy() if hasattr(self.robot.joint_limits, 'copy') else self.robot.joint_limits[:]
@@ -226,17 +229,23 @@ class CalibrationManager:
 		
 		# Step 0: 초기화 (토크 비활성화)
 		if self.calibration_current_step == 0:
-			# 전압 감지
-			voltage = self.robot.detect_voltage()
-			self._log(f"Detected voltage: {voltage}", "info")
-			
-			# 기본 설정 로드
-			if not self.robot.config:
-				self.robot.load_default_config(voltage)
-			
+			# SOArm100AdapterV2는 전압 감지나 config 로드가 필요 없음
 			# 토크 비활성화 (수동으로 로봇을 움직일 수 있도록)
-			self.robot.disable_torque()
-			self._log("Torque disabled. You can now move the robot manually.", "info")
+			try:
+				if hasattr(self.robot, 'disable_torque'):
+					self.robot.disable_torque()
+				else:
+					# motors_bus를 통해 직접 토크 비활성화
+					if hasattr(self.robot, 'motors_bus') and self.robot.motors_bus:
+						# MOTORS가 딕셔너리인 경우 길이 계산
+						if hasattr(self.robot, 'MOTORS'):
+							num_motors = len(self.robot.MOTORS) if isinstance(self.robot.MOTORS, (list, dict)) else 6
+						else:
+							num_motors = 6
+						self.robot.motors_bus.write("Torque_Enable", [0] * num_motors)
+				self._log("Torque disabled. You can now move the robot manually.", "info")
+			except Exception as e:
+				self._log(f"Failed to disable torque: {e}", "warning")
 			
 			# 조인트 범위 초기화
 			self.joint_min_positions = [None] * 6
@@ -328,13 +337,16 @@ class CalibrationManager:
 				self.robot.calibration_offsets = self.data["joint_offsets"]
 				self._log("Calibration offsets applied to robot adapter", "success")
 			
-			# 조인트 제한값 업데이트 (측정된 범위를 제한값으로 사용)
+			# 조인트 제한값 업데이트 (측정된 범위를 제한값으로 사용, min/max 정규화)
 			if hasattr(self.robot, 'joint_limits'):
 				new_limits = []
 				for i in range(6):
 					min_val = self.joint_min_positions[i] if self.joint_min_positions[i] is not None else -180
 					max_val = self.joint_max_positions[i] if self.joint_max_positions[i] is not None else 180
-					new_limits.append([min_val, max_val])
+					# min/max 순서 정규화 (항상 min < max)
+					normalized_min = min(min_val, max_val)
+					normalized_max = max(min_val, max_val)
+					new_limits.append([normalized_min, normalized_max])
 				self.robot.joint_limits = new_limits
 				self._log(f"Joint limits updated from calibration: {new_limits}", "success")
 			
@@ -358,8 +370,21 @@ class CalibrationManager:
 					self._log(f"Warning: Failed to update FeetechMotorsBus calibration: {e}", "warning")
 			
 			# 토크 재활성화
-			self.robot.enable_torque()
-			self._log("Torque re-enabled", "info")
+			try:
+				if hasattr(self.robot, 'enable_torque'):
+					self.robot.enable_torque()
+				else:
+					# motors_bus를 통해 직접 토크 활성화
+					if hasattr(self.robot, 'motors_bus') and self.robot.motors_bus:
+						# MOTORS가 딕셔너리인 경우 길이 계산
+						if hasattr(self.robot, 'MOTORS'):
+							num_motors = len(self.robot.MOTORS) if isinstance(self.robot.MOTORS, (list, dict)) else 6
+						else:
+							num_motors = 6
+						self.robot.motors_bus.write("Torque_Enable", [1] * num_motors)
+				self._log("Torque re-enabled", "info")
+			except Exception as e:
+				self._log(f"Failed to enable torque: {e}", "warning")
 			
 			# 캘리브레이션 데이터 저장
 			from ..config import CALIBRATION_DIR

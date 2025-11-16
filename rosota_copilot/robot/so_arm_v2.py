@@ -170,12 +170,15 @@ class SOArm100AdapterV2:
 			logger.error(f"[SOArmV2] Invalid joint index: {joint_index}")
 			return False
 		
-		# 제한 확인
+		# 제한 확인 (min/max 순서 정규화)
 		limits = self.joint_limits[joint_index]
-		if target_deg < limits[0] or target_deg > limits[1]:
+		min_limit = min(limits[0], limits[1])
+		max_limit = max(limits[0], limits[1])
+		
+		if target_deg < min_limit or target_deg > max_limit:
 			logger.warning(
 				f"[SOArmV2] Joint {joint_index} target {target_deg:.2f}° exceeds limits "
-				f"[{limits[0]:.2f}, {limits[1]:.2f}]"
+				f"[{min_limit:.2f}, {max_limit:.2f}]"
 			)
 			return False
 		

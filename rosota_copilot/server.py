@@ -279,19 +279,27 @@ async def auto_connect_robot():
 					calib_file = os.path.join(CALIBRATION_DIR, "calibration.json")
 					if os.path.exists(calib_file):
 						calibration_manager.load(calib_file)
+						print(f"[Server] Calibration data loaded from {calib_file}")
 				except Exception as e:
 					# 캘리브레이션 파일이 없거나 로드 실패해도 연결은 성공
 					print(f"[Server] Warning: Could not load calibration data: {e}")
+					import traceback
+					traceback.print_exc()
 				
 				# 모든 클라이언트에 연결 상태 알림
-				await sio.emit("robot:auto_connected", {
-					"port": port,
-					"status": "Connected"
-				})
+				try:
+					await sio.emit("robot:auto_connected", {
+						"port": port,
+						"status": "Connected"
+					})
+				except Exception as e:
+					print(f"[Server] Warning: Could not emit auto_connected event: {e}")
 			else:
 				print(f"Failed to auto-connect to {port}")
 		except Exception as e:
 			print(f"Auto-connect error: {e}")
+			import traceback
+			traceback.print_exc()
 	else:
 		print("No robot port detected")
 
