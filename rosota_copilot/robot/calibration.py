@@ -19,8 +19,8 @@ class CalibrationManager:
 		}
 		# 캘리브레이션 마법사 상태
 		self.calibration_current_step = 0
-		self.calibration_max_steps = 3
-		# LeRobot 방식: 각 조인트의 최소/최대값 측정용
+		self.calibration_max_steps = 2  # 2단계: 범위 측정, 저장
+		# 각 조인트의 최소/최대값 측정용
 		self.joint_min_positions = [None] * 6  # 각 조인트의 최소 위치 (기록된 값)
 		self.joint_max_positions = [None] * 6  # 각 조인트의 최대 위치 (기록된 값)
 		self.current_joint_index = 0  # 현재 측정 중인 조인트 인덱스
@@ -247,55 +247,8 @@ class CalibrationManager:
 			self.realtime_current_positions = [0.0] * 6
 			self.current_joint_index = 0
 			
-			self.calibration_current_step = 1
-			return (
-				"in_progress",
-				f"Step {self.calibration_current_step}/{self.calibration_max_steps}: 중간 위치로 이동\n\n"
-				"📋 작업 내용:\n"
-				"• 모든 조인트를 중간 위치로 수동으로 이동하세요\n"
-				"• 각 조인트의 최소값과 최대값의 중간 위치입니다\n"
-				"• 로봇을 부드럽게 움직이세요\n\n"
-				"⚠️ 주의사항:\n"
-				"• 조인트 제한 범위를 초과하지 않도록 주의하세요\n"
-				"• 위치가 정확하면 'Next Step' 버튼을 클릭하세요"
-			)
-		
-		# Step 1: 중간 위치 확인 및 조인트 범위 측정 시작
-		if self.calibration_current_step == 1:
-			# 현재 위치 읽기 (중간 위치 확인용)
-			state = self.robot.get_state()
-			current_joints = state.get("joint_positions", [0.0] * 6)
-			
-			# 조인트 제한값 가져오기
-			joint_limits = getattr(self.robot, 'joint_limits', [[-180, 180]] * 6)
-			
-			# 중간 위치 계산 및 표시
-			middle_positions = []
-			for i in range(6):
-				min_limit, max_limit = joint_limits[i] if i < len(joint_limits) else [-180, 180]
-				middle = (min_limit + max_limit) / 2
-				middle_positions.append(middle)
-			
-			self._log(f"Middle positions: {[f'{m:.1f}°' for m in middle_positions]}", "info")
-			self._log(f"Current positions: {[f'{j:.1f}°' for j in current_joints]}", "info")
-			
-			# 첫 번째 조인트 측정 시작
-			self.current_joint_index = 0
+			# Step 1을 건너뛰고 바로 Step 2 (조인트 범위 측정)로
 			self.calibration_current_step = 2
-			
-			joint_name = self.robot.JOINT_NAMES[0] if hasattr(self.robot, 'JOINT_NAMES') else "Joint 1"
-			return (
-				"in_progress",
-				f"Step {self.calibration_current_step}/{self.calibration_max_steps}: 조인트 범위 측정\n\n"
-				f"📋 현재 측정 중: {joint_name} (조인트 {self.current_joint_index + 1}/6)\n\n"
-				"📋 작업 내용:\n"
-				f"• {joint_name}를 최소 위치로 이동하세요\n"
-				"• 최소 위치에 도달하면 'Record Min' 버튼을 클릭하세요\n"
-				"• 그 다음 최대 위치로 이동하고 'Record Max' 버튼을 클릭하세요\n\n"
-				"💡 팁:\n"
-				"• 각 조인트를 천천히 움직이며 전체 범위를 확인하세요\n"
-				"• 최소/최대 위치를 정확히 기록하는 것이 중요합니다"
-			)
 		
 		# Step 2: 각 조인트의 최소/최대값 측정
 		if self.calibration_current_step == 2:
@@ -303,28 +256,28 @@ class CalibrationManager:
 			# 여기서는 다음 조인트로 넘어가는 로직만 처리
 			# 실제 측정은 별도 API 엔드포인트에서 처리
 			
-			# 모든 조인트 측정 완료 확인
-			if self.current_joint_index >= 6:
-				self.calibration_current_step = 3
-				return (
-					"in_progress",
-					f"Step {self.calibration_current_step}/{self.calibration_max_steps}: 캘리브레이션 데이터 저장\n\n"
-					"📋 작업 내용:\n"
-					"• 모든 조인트의 범위가 측정되었습니다\n"
-					"• 측정된 범위:\n"
-					+ "\n".join([
-						f"  - {self.robot.JOINT_NAMES[i] if hasattr(self.robot, 'JOINT_NAMES') else f'Joint {i+1}'}: "
-						f"{self.joint_min_positions[i]:.1f}° ~ {self.joint_max_positions[i]:.1f}°"
-						for i in range(6) if self.joint_min_positions[i] is not None and self.joint_max_positions[i] is not None
-					]) + "\n\n"
-					"✅ 'Next Step' 버튼을 클릭하면 캘리브레이션 데이터를 저장하고 완료합니다."
-				)
-			
-			# 다음 조인트로 넘어가기 (프론트엔드에서 호출)
-			joint_name = self.robot.JOINT_NAMES[self.current_joint_index] if hasattr(self.robot, 'JOINT_NAMES') else f"Joint {self.current_joint_index + 1}"
+		# 모든 조인트 측정 완료 확인
+		if self.current_joint_index >= 6:
+			self.calibration_current_step = 3  # 내부적으로 3으로 유지 (조건문 호환)
 			return (
 				"in_progress",
-				f"Step {self.calibration_current_step}/{self.calibration_max_steps}: 조인트 범위 측정\n\n"
+				f"Step 2/{self.calibration_max_steps}: 캘리브레이션 데이터 저장\n\n"
+				"📋 작업 내용:\n"
+				"• 모든 조인트의 범위가 측정되었습니다\n"
+				"• 측정된 범위:\n"
+				+ "\n".join([
+					f"  - {self.robot.JOINT_NAMES[i] if hasattr(self.robot, 'JOINT_NAMES') else f'Joint {i+1}'}: "
+					f"{self.joint_min_positions[i]:.1f}° ~ {self.joint_max_positions[i]:.1f}°"
+					for i in range(6) if self.joint_min_positions[i] is not None and self.joint_max_positions[i] is not None
+				]) + "\n\n"
+				"✅ 'Next Step' 버튼을 클릭하면 캘리브레이션 데이터를 저장하고 완료합니다."
+			)
+			
+		# 다음 조인트로 넘어가기 (프론트엔드에서 호출)
+		joint_name = self.robot.JOINT_NAMES[self.current_joint_index] if hasattr(self.robot, 'JOINT_NAMES') else f"Joint {self.current_joint_index + 1}"
+		return (
+			"in_progress",
+			f"Step 1/{self.calibration_max_steps}: 조인트 범위 측정\n\n"
 				f"📋 현재 측정 중: {joint_name} (조인트 {self.current_joint_index + 1}/6)\n\n"
 				"📋 작업 내용:\n"
 				f"• {joint_name}를 최소 위치로 이동하세요\n"
@@ -335,7 +288,7 @@ class CalibrationManager:
 				"• 최소/최대 위치를 정확히 기록하는 것이 중요합니다"
 			)
 		
-		# Step 3: 완료 및 저장
+		# Step 2: 완료 및 저장 (이전 Step 3)
 		if self.calibration_current_step == 3:
 			# 측정된 범위를 기반으로 오프셋 계산
 			# 중간 위치를 0으로 만드는 오프셋 계산
