@@ -715,28 +715,68 @@ async def setup_status(request: Request):
 
 @api_router.get("/calibration/status")
 async def calibration_status(request: Request):
-	"""캘리브레이션 상태 조회"""
+	"""캘리브레이션 상태 조회 (로봇 하드웨어에서 직접 확인)"""
 	try:
 		calibration_manager = request.app.state.calibration_manager
+		robot = request.app.state.robot
 		from ..config import CALIBRATION_DIR
 		import os
 		
 		calib_file = os.path.join(CALIBRATION_DIR, "calibration.json")
-		is_calibrated = os.path.exists(calib_file)
+		has_calibration_file = os.path.exists(calib_file)
 		
-		# 캘리브레이션 데이터가 있고 joint_ranges가 있으면 완료로 간주
-		if is_calibrated:
+		# 로봇이 연결되어 있는지 확인
+		is_connected = robot is not None and robot.connected
+		
+		is_calibrated = False
+		calibration_valid = False
+		joint_ranges_valid = False
+		
+		# 1단계: 캘리브레이션 파일 존재 확인
+		if has_calibration_file:
 			try:
 				calibration_manager.load(calib_file)
 				has_joint_ranges = "joint_ranges" in calibration_manager.data
-				is_calibrated = has_joint_ranges
-			except:
+				joint_ranges_valid = has_joint_ranges
+				
+				# 2단계: 로봇이 연결되어 있으면 실제 하드웨어에서 조인트 위치 읽기 시도
+				# (캘리브레이션 유효성 검증용 - 실제로 하드웨어와 통신 가능한지 확인)
+				if is_connected and has_joint_ranges:
+					try:
+						# 현재 조인트 위치 읽기 (하드웨어 통신 가능 여부 확인)
+						state = robot.get_state()
+						current_positions = state.get("joint_positions", [])
+						
+						if len(current_positions) == 6:
+							# 하드웨어에서 위치를 성공적으로 읽었음
+							# 캘리브레이션은 유효 (파일이 있고 joint_ranges가 있으면)
+							calibration_valid = True
+							is_calibrated = has_joint_ranges
+						else:
+							# 조인트 위치를 읽을 수 없음 (하드웨어 통신 문제 가능)
+							calibration_valid = False
+							# 파일은 있지만 하드웨어 검증 실패
+							is_calibrated = has_joint_ranges  # 파일 기반으로는 유효
+					except Exception as e:
+						# 하드웨어 읽기 실패 시 파일 기반으로만 판단
+						print(f"[API] Warning: Could not read joint positions from robot hardware: {e}")
+						calibration_valid = False
+						is_calibrated = has_joint_ranges  # 파일 기반으로는 유효
+				else:
+					# 로봇이 연결되지 않았으면 파일 기반으로만 판단
+					calibration_valid = None  # 검증 불가
+					is_calibrated = has_joint_ranges
+			except Exception as e:
+				print(f"[API] Warning: Could not load calibration file: {e}")
 				is_calibrated = False
 		
 		return {
 			"ok": True,
 			"is_calibrated": is_calibrated,
-			"has_calibration_file": os.path.exists(calib_file)
+			"has_calibration_file": has_calibration_file,
+			"joint_ranges_valid": joint_ranges_valid,
+			"calibration_valid": calibration_valid if is_connected else None,  # 로봇 연결 시에만 검증
+			"robot_connected": is_connected
 		}
 	except Exception as e:
 		raise HTTPException(status_code=500, detail=str(e))
