@@ -179,6 +179,34 @@ class CalibrationManager:
 			if hasattr(self.robot, 'calibration_offsets'):
 				self.robot.calibration_offsets = self.data["joint_offsets"]
 				self._log("Calibration offsets applied to robot adapter", "info")
+		
+		# 모터의 하드웨어 Angle_Limit 업데이트 (로드 시에도 적용)
+		if "joint_ranges" in self.data and self.robot:
+			if hasattr(self.robot, 'motors_bus') and self.robot.motors_bus:
+				try:
+					joint_ranges = self.data["joint_ranges"]
+					if "min" in joint_ranges and "max" in joint_ranges:
+						self._log("Updating motor hardware angle limits from calibration file...", "info")
+						for i in range(6):
+							motor_name = self.robot.JOINT_NAMES[i]
+							min_deg = joint_ranges["min"][i] if i < len(joint_ranges["min"]) else -180
+							max_deg = joint_ranges["max"][i] if i < len(joint_ranges["max"]) else 180
+							
+							# 안전 마진 추가 (±5도)
+							min_deg -= 5
+							max_deg += 5
+							
+							# Angle_Limit_Min과 Angle_Limit_Max 설정
+							try:
+								self.robot.motors_bus.write("Angle_Limit_Min", values=[min_deg], motor_names=motor_name)
+								self.robot.motors_bus.write("Angle_Limit_Max", values=[max_deg], motor_names=motor_name)
+								self._log(f"  {motor_name}: {min_deg:.1f}° ~ {max_deg:.1f}°", "info")
+							except Exception as e:
+								self._log(f"  Warning: Failed to set angle limits for {motor_name}: {e}", "warning")
+						
+						self._log("Motor hardware angle limits updated from calibration!", "success")
+				except Exception as e:
+					self._log(f"Warning: Failed to update motor angle limits: {e}", "warning")
 	
 	def calibrate_step(self) -> tuple[str, str]:
 		"""
@@ -349,50 +377,77 @@ class CalibrationManager:
 				self.robot.joint_limits = new_limits
 				self._log(f"Joint limits updated from calibration: {new_limits}", "success")
 			
-			# FeetechMotorsBus 캘리브레이션 업데이트
-			if hasattr(self.robot, 'motors_bus') and self.robot.motors_bus:
-				try:
-					from .motors.feetech import CalibrationMode
-					# 중간 위치를 기준으로 homing_offset 계산
-					calibration_data = {
-						"motor_names": list(self.robot.MOTORS.keys()),
-						"calib_mode": [CalibrationMode.DEGREE.name] * len(self.robot.MOTORS),
-						"drive_mode": [0] * len(self.robot.MOTORS),
-						"homing_offset": [0] * len(self.robot.MOTORS),  # TODO: 실제 스텝 값으로 변환
-					}
-					self.robot.motors_bus.set_calibration(calibration_data)
-					self._log("FeetechMotorsBus calibration updated", "success")
-				except Exception as e:
-					self._log(f"Warning: Failed to update FeetechMotorsBus calibration: {e}", "warning")
-			
-			# 토크 재활성화
-			self.robot.enable_torque()
-			self._log("Torque re-enabled", "info")
-			
-			# 캘리브레이션 데이터 저장
-			from ..config import CALIBRATION_DIR
-			os.makedirs(CALIBRATION_DIR, exist_ok=True)
-			calib_file = os.path.join(CALIBRATION_DIR, "calibration.json")
-			self.save(calib_file)
-			self._log(f"Calibration saved to {calib_file}", "success")
-			
-			# 상태 초기화
-			self.calibration_current_step = 0
-			self.joint_min_positions = [None] * 6
-			self.joint_max_positions = [None] * 6
-			self.current_joint_index = 0
-			
-			return (
-				"success",
-				"Calibration completed successfully! The robot is now calibrated and ready to use.\n\n"
-				"측정된 조인트 범위:\n"
-				+ "\n".join([
-					f"  - {self.robot.JOINT_NAMES[i] if hasattr(self.robot, 'JOINT_NAMES') else f'Joint {i+1}'}: "
-					f"{self.data['joint_ranges']['min'][i]:.1f}° ~ {self.data['joint_ranges']['max'][i]:.1f}° "
-					f"(중간: {self.data['joint_ranges']['middle'][i]:.1f}°)"
-					for i in range(6)
-				])
-			)
+		# FeetechMotorsBus 캘리브레이션 업데이트
+		if hasattr(self.robot, 'motors_bus') and self.robot.motors_bus:
+			try:
+				from .motors.feetech import CalibrationMode
+				# 중간 위치를 기준으로 homing_offset 계산
+				calibration_data = {
+					"motor_names": list(self.robot.MOTORS.keys()),
+					"calib_mode": [CalibrationMode.DEGREE.name] * len(self.robot.MOTORS),
+					"drive_mode": [0] * len(self.robot.MOTORS),
+					"homing_offset": [0] * len(self.robot.MOTORS),  # TODO: 실제 스텝 값으로 변환
+				}
+				self.robot.motors_bus.set_calibration(calibration_data)
+				self._log("FeetechMotorsBus calibration updated", "success")
+			except Exception as e:
+				self._log(f"Warning: Failed to update FeetechMotorsBus calibration: {e}", "warning")
+		
+		# 모터의 하드웨어 Angle_Limit 업데이트 (매우 중요!)
+		# 이것이 없으면 모터가 물리적으로 캘리브레이션된 범위 밖으로 못 움직임
+		if hasattr(self.robot, 'motors_bus') and self.robot.motors_bus:
+			try:
+				self._log("Updating motor hardware angle limits...", "info")
+				for i in range(6):
+					motor_name = self.robot.JOINT_NAMES[i]
+					min_deg = self.joint_min_positions[i] if self.joint_min_positions[i] is not None else -180
+					max_deg = self.joint_max_positions[i] if self.joint_max_positions[i] is not None else 180
+					
+					# 안전 마진 추가 (±5도)
+					min_deg -= 5
+					max_deg += 5
+					
+					self._log(f"  {motor_name}: {min_deg:.1f}° ~ {max_deg:.1f}°", "info")
+					
+					# Angle_Limit_Min과 Angle_Limit_Max 설정
+					try:
+						self.robot.motors_bus.write("Angle_Limit_Min", values=[min_deg], motor_names=motor_name)
+						self.robot.motors_bus.write("Angle_Limit_Max", values=[max_deg], motor_names=motor_name)
+					except Exception as e:
+						self._log(f"  Warning: Failed to set angle limits for {motor_name}: {e}", "warning")
+				
+				self._log("Motor hardware angle limits updated successfully!", "success")
+			except Exception as e:
+				self._log(f"Warning: Failed to update motor angle limits: {e}", "warning")
+		
+		# 토크 재활성화
+		self.robot.enable_torque()
+		self._log("Torque re-enabled", "info")
+		
+		# 캘리브레이션 데이터 저장
+		from ..config import CALIBRATION_DIR
+		os.makedirs(CALIBRATION_DIR, exist_ok=True)
+		calib_file = os.path.join(CALIBRATION_DIR, "calibration.json")
+		self.save(calib_file)
+		self._log(f"Calibration saved to {calib_file}", "success")
+		
+		# 상태 초기화
+		self.calibration_current_step = 0
+		self.joint_min_positions = [None] * 6
+		self.joint_max_positions = [None] * 6
+		self.current_joint_index = 0
+		
+		return (
+			"success",
+			"Calibration completed successfully! The robot is now calibrated and ready to use.\n\n"
+			"측정된 조인트 범위:\n"
+			+ "\n".join([
+				f"  - {self.robot.JOINT_NAMES[i] if hasattr(self.robot, 'JOINT_NAMES') else f'Joint {i+1}'}: "
+				f"{self.data['joint_ranges']['min'][i]:.1f}° ~ {self.data['joint_ranges']['max'][i]:.1f}° "
+				f"(중간: {self.data['joint_ranges']['middle'][i]:.1f}°)"
+				for i in range(6)
+			])
+		)
 		
 		return ("error", "Unknown calibration step")
 	
