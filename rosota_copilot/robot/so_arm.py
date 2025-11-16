@@ -327,21 +327,24 @@ class SOArm100Adapter:
 					# 토크 확인 실패해도 계속 진행
 				
 				# 현재 위치 읽기 (여러 번 시도)
+				# 중요: 캐시를 사용하지 않고 반드시 실제 위치를 읽어야 함
+				# 그렇지 않으면 캐시된 목표 위치와 실제 위치가 달라서 
+				# 절대 위치 명령이 잘못 계산됨
 				current_pos = None
-				for retry in range(3):
+				for retry in range(5):  # 3번 -> 5번으로 증가
 					current_pos = self._read_joint_position(joint_index)
 					if current_pos is not None:
 						break
 					import time
-					time.sleep(0.01)  # 짧은 대기 후 재시도
+					time.sleep(0.02)  # 10ms -> 20ms로 증가 (모터가 움직일 시간 확보)
 				
-				# 읽기 실패 시 캐시 사용하되 경고
+				# 읽기 실패 시 명령 거부 (캐시 사용하지 않음)
 				if current_pos is None:
-					logger.warning(f"[SOArm] Could not read current position for joint {joint_index} after 3 retries, using cached value")
-					current_pos = self._sim_joint_positions[joint_index]
-				else:
-					# 성공적으로 읽었으면 캐시 업데이트
-					self._sim_joint_positions[joint_index] = current_pos
+					logger.error(
+						f"[SOArm] Cannot move joint {joint_index} - failed to read current position after 5 retries. "
+						f"Motor may not be responding. Check connection and power."
+					)
+					return False  # 캐시 사용 대신 명령 거부
 				
 				# 새 위치 계산
 				new_position = current_pos + delta_deg
@@ -373,18 +376,9 @@ class SOArm100Adapter:
 				self.motors_bus.write("Goal_Position", values=[new_position], motor_names=motor_name)
 				logger.debug(f"Joint {joint_index} write command sent successfully")
 				
-				# 목표 위치를 캐시에 저장 (실제 위치는 다음 읽기에서 업데이트됨)
-				# 하지만 즉시 업데이트하지 않고, 다음 get_state() 호출 시 실제 위치를 읽어서 업데이트
-				# 이렇게 하면 빠른 연속 명령에서도 정확한 위치 추적 가능
-				self._sim_joint_positions[joint_index] = new_position
-				
-				# 짧은 대기 후 실제 위치를 다시 읽어서 캐시 업데이트 (선택적)
-				# 빠른 연속 명령에서는 이 부분이 오버헤드가 될 수 있으므로 주석 처리
-				# import time
-				# time.sleep(0.05)  # 모터가 움직일 시간을 줌
-				# actual_pos = self._read_joint_position(joint_index)
-				# if actual_pos is not None:
-				#     self._sim_joint_positions[joint_index] = actual_pos
+				# 캐시는 업데이트하지 않음!
+				# 다음 명령 시 반드시 실제 위치를 다시 읽어서 사용
+				# self._sim_joint_positions[joint_index] = new_position  # 이전 코드 (문제의 원인)
 				
 				return True
 				
