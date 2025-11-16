@@ -180,33 +180,33 @@ class CalibrationManager:
 				self.robot.calibration_offsets = self.data["joint_offsets"]
 				self._log("Calibration offsets applied to robot adapter", "info")
 		
-		# 모터의 하드웨어 Angle_Limit 업데이트 (로드 시에도 적용)
-		if "joint_ranges" in self.data and self.robot:
+		# FeetechMotorsBus에 homing_offset 적용 (로드 시)
+		if "homing_offsets_steps" in self.data and self.robot:
 			if hasattr(self.robot, 'motors_bus') and self.robot.motors_bus:
 				try:
-					joint_ranges = self.data["joint_ranges"]
-					if "min" in joint_ranges and "max" in joint_ranges:
-						self._log("Updating motor hardware angle limits from calibration file...", "info")
-						for i in range(6):
-							motor_name = self.robot.JOINT_NAMES[i]
-							min_deg = joint_ranges["min"][i] if i < len(joint_ranges["min"]) else -180
-							max_deg = joint_ranges["max"][i] if i < len(joint_ranges["max"]) else 180
-							
-							# 안전 마진 추가 (±5도)
-							min_deg -= 5
-							max_deg += 5
-							
-							# Angle_Limit_Min과 Angle_Limit_Max 설정
-							try:
-								self.robot.motors_bus.write("Angle_Limit_Min", values=[min_deg], motor_names=motor_name)
-								self.robot.motors_bus.write("Angle_Limit_Max", values=[max_deg], motor_names=motor_name)
-								self._log(f"  {motor_name}: {min_deg:.1f}° ~ {max_deg:.1f}°", "info")
-							except Exception as e:
-								self._log(f"  Warning: Failed to set angle limits for {motor_name}: {e}", "warning")
-						
-						self._log("Motor hardware angle limits updated from calibration!", "success")
+					from .motors.feetech import CalibrationMode
+					
+					homing_offsets = self.data["homing_offsets_steps"]
+					self._log(f"Applying homing offsets from calibration file...", "info")
+					
+					# 캘리브레이션 데이터 설정
+					calibration_data = {
+						"motor_names": list(self.robot.MOTORS.keys()),
+						"calib_mode": [CalibrationMode.DEGREE.name] * len(self.robot.MOTORS),
+						"drive_mode": [0] * len(self.robot.MOTORS),
+						"homing_offset": homing_offsets,
+					}
+					self.robot.motors_bus.set_calibration(calibration_data)
+					self._log("Homing offsets applied successfully!", "success")
 				except Exception as e:
-					self._log(f"Warning: Failed to update motor angle limits: {e}", "warning")
+					self._log(f"Warning: Failed to apply homing offsets: {e}", "warning")
+		
+		# 캘리브레이션 로드 시에는 소프트웨어 제한만 사용
+		# (하드웨어 Angle_Limit은 Feetech 모터의 제한으로 인해 설정하지 않음)
+		if "joint_ranges" in self.data and self.robot:
+			joint_ranges = self.data["joint_ranges"]
+			if "min" in joint_ranges and "max" in joint_ranges:
+				self._log("Calibration loaded - using software limits only", "info")
 	
 	def calibrate_step(self) -> tuple[str, str]:
 		"""
@@ -362,6 +362,13 @@ class CalibrationManager:
 				"middle": joint_middles
 			}
 			
+			# homing_offset도 저장 (나중에 로드 시 사용)
+			self.data["homing_offsets_steps"] = []
+			for i in range(6):
+				middle_deg = joint_middles[i]
+				offset_steps = int(-middle_deg * 4096 / 360)
+				self.data["homing_offsets_steps"].append(offset_steps)
+			
 			# SO-100 어댑터의 캘리브레이션 오프셋 업데이트
 			if hasattr(self.robot, 'calibration_offsets'):
 				self.robot.calibration_offsets = self.data["joint_offsets"]
@@ -378,47 +385,42 @@ class CalibrationManager:
 				self._log(f"Joint limits updated from calibration: {new_limits}", "success")
 			
 		# FeetechMotorsBus 캘리브레이션 업데이트
+		# 각 조인트의 중간 위치를 0°로 만드는 homing_offset 계산
 		if hasattr(self.robot, 'motors_bus') and self.robot.motors_bus:
 			try:
 				from .motors.feetech import CalibrationMode
-				# 중간 위치를 기준으로 homing_offset 계산
-				calibration_data = {
-					"motor_names": list(self.robot.MOTORS.keys()),
-					"calib_mode": [CalibrationMode.DEGREE.name] * len(self.robot.MOTORS),
-					"drive_mode": [0] * len(self.robot.MOTORS),
-					"homing_offset": [0] * len(self.robot.MOTORS),  # TODO: 실제 스텝 값으로 변환
-				}
-				self.robot.motors_bus.set_calibration(calibration_data)
-				self._log("FeetechMotorsBus calibration updated", "success")
-			except Exception as e:
-				self._log(f"Warning: Failed to update FeetechMotorsBus calibration: {e}", "warning")
-		
-		# 모터의 하드웨어 Angle_Limit 업데이트 (매우 중요!)
-		# 이것이 없으면 모터가 물리적으로 캘리브레이션된 범위 밖으로 못 움직임
-		if hasattr(self.robot, 'motors_bus') and self.robot.motors_bus:
-			try:
-				self._log("Updating motor hardware angle limits...", "info")
+				
+				# 현재 각 모터의 raw 위치를 읽어서 homing_offset 계산
+				homing_offsets = []
 				for i in range(6):
 					motor_name = self.robot.JOINT_NAMES[i]
 					min_deg = self.joint_min_positions[i] if self.joint_min_positions[i] is not None else -180
 					max_deg = self.joint_max_positions[i] if self.joint_max_positions[i] is not None else 180
+					middle_deg = (min_deg + max_deg) / 2
 					
-					# 안전 마진 추가 (±5도)
-					min_deg -= 5
-					max_deg += 5
+					# 현재 위치를 middle_deg로 읽고 있다면, 이 위치가 0°가 되도록 설정
+					# homing_offset은 "실제 스텝 0이 소프트웨어에서 몇 도인지"를 정의
+					# 우리는 middle_deg를 0°로 만들고 싶으므로:
+					# offset_degrees = -middle_deg
+					offset_degrees = -middle_deg
 					
-					self._log(f"  {motor_name}: {min_deg:.1f}° ~ {max_deg:.1f}°", "info")
+					# 스텝으로 변환 (4096 steps = 360 degrees)
+					offset_steps = int(offset_degrees * 4096 / 360)
+					homing_offsets.append(offset_steps)
 					
-					# Angle_Limit_Min과 Angle_Limit_Max 설정
-					try:
-						self.robot.motors_bus.write("Angle_Limit_Min", values=[min_deg], motor_names=motor_name)
-						self.robot.motors_bus.write("Angle_Limit_Max", values=[max_deg], motor_names=motor_name)
-					except Exception as e:
-						self._log(f"  Warning: Failed to set angle limits for {motor_name}: {e}", "warning")
+					self._log(f"  {motor_name}: middle={middle_deg:.1f}°, homing_offset={offset_steps} steps", "info")
 				
-				self._log("Motor hardware angle limits updated successfully!", "success")
+				# 캘리브레이션 데이터 설정
+				calibration_data = {
+					"motor_names": list(self.robot.MOTORS.keys()),
+					"calib_mode": [CalibrationMode.DEGREE.name] * len(self.robot.MOTORS),
+					"drive_mode": [0] * len(self.robot.MOTORS),
+					"homing_offset": homing_offsets,
+				}
+				self.robot.motors_bus.set_calibration(calibration_data)
+				self._log("FeetechMotorsBus calibration with homing_offset applied!", "success")
 			except Exception as e:
-				self._log(f"Warning: Failed to update motor angle limits: {e}", "warning")
+				self._log(f"Warning: Failed to update FeetechMotorsBus calibration: {e}", "warning")
 		
 		# 토크 재활성화
 		self.robot.enable_torque()
