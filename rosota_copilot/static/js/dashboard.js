@@ -17,7 +17,6 @@
 	const statusText = document.getElementById("status-text");
 	const topStatusDot = document.getElementById("top-status-dot");
 	const topStatusText = document.getElementById("top-status-text");
-	const topCalibrationStatus = document.getElementById("top-calibration-status");
 	const topPort = document.getElementById("top-port");
 	const topBaudrate = document.getElementById("top-baudrate");
 	const topConnectionInfo = document.getElementById("top-connection-info");
@@ -1343,7 +1342,6 @@
 					wizardCancelBtn.textContent = "Close";
 					stopRealtimeUpdate();
 					log("Calibration completed successfully!", "success");
-					updateCalibrationStatus(); // 상태 업데이트
 				} else if (json.status === "error") {
 					wizardActive = false;
 					wizardNextBtn.style.display = "none";
@@ -1455,38 +1453,10 @@
 		}
 	}
 
-	// 상태 업데이트 함수
-	async function updateCalibrationStatus() {
-		try {
-			const res = await fetch("/api/calibration/status");
-			const json = await res.json();
-			
-			if (json.ok && topCalibrationStatus) {
-				if (json.is_calibrated) {
-					topCalibrationStatus.className = "status-badge calibrated";
-					topCalibrationStatus.textContent = "✓ Calibrated";
-					topCalibrationStatus.setAttribute("data-i18n", "status.calibrated");
-				} else {
-					topCalibrationStatus.className = "status-badge not_calibrated";
-					topCalibrationStatus.textContent = "Not Calibrated";
-					topCalibrationStatus.setAttribute("data-i18n", "status.not_calibrated");
-				}
-				applyLanguage(); // 번역 적용
-			}
-		} catch (error) {
-			console.error("Failed to update calibration status:", error);
-		}
-	}
-	
-	// 주기적으로 상태 업데이트 (5초마다)
-	setInterval(() => {
-		updateCalibrationStatus();
-	}, 5000);
 	
 	// Initialize
 	updateKeyboardHints("joint");
 	loadPorts(); // Load ports on page load
-	updateCalibrationStatus(); // 초기 상태 업데이트
 	log("Rosota Copilot initialized", "success");
 	
 	// 초기 모드 텍스트 번역 적용
