@@ -180,29 +180,27 @@ class CalibrationManager:
 				self.robot.calibration_offsets = self.data["joint_offsets"]
 				self._log("Calibration offsets applied to robot adapter", "info")
 		
-		# FeetechMotorsBus에 homing_offset 적용 (로드 시)
-		if "homing_offsets_steps" in self.data and self.robot:
-			if hasattr(self.robot, 'motors_bus') and self.robot.motors_bus:
-				try:
-					from .motors.feetech import CalibrationMode
-					
-					homing_offsets = self.data["homing_offsets_steps"]
-					self._log(f"Applying homing offsets from calibration file...", "info")
-					
-					# 캘리브레이션 데이터 설정
-					calibration_data = {
-						"motor_names": list(self.robot.MOTORS.keys()),
-						"calib_mode": [CalibrationMode.DEGREE.name] * len(self.robot.MOTORS),
-						"drive_mode": [0] * len(self.robot.MOTORS),
-						"homing_offset": homing_offsets,
-					}
-					self.robot.motors_bus.set_calibration(calibration_data)
-					self._log("Homing offsets applied successfully!", "success")
-				except Exception as e:
-					self._log(f"Warning: Failed to apply homing offsets: {e}", "warning")
+		# FeetechMotorsBus 기본 캘리브레이션 사용 (로드 시)
+		# homing_offset은 사용하지 않음 (Feetech 모터는 -180° ~ +180° 지원)
+		if hasattr(self.robot, 'motors_bus') and self.robot.motors_bus:
+			try:
+				from .motors.feetech import CalibrationMode
+				
+				self._log("Resetting to default calibration (homing_offset = 0)", "info")
+				
+				# 기본 캘리브레이션 데이터 설정
+				calibration_data = {
+					"motor_names": list(self.robot.MOTORS.keys()),
+					"calib_mode": [CalibrationMode.DEGREE.name] * len(self.robot.MOTORS),
+					"drive_mode": [0] * len(self.robot.MOTORS),
+					"homing_offset": [0] * len(self.robot.MOTORS),  # 모두 0으로 리셋
+				}
+				self.robot.motors_bus.set_calibration(calibration_data)
+				self._log("Default calibration applied!", "success")
+			except Exception as e:
+				self._log(f"Warning: Failed to reset calibration: {e}", "warning")
 		
 		# 캘리브레이션 로드 시에는 소프트웨어 제한만 사용
-		# (하드웨어 Angle_Limit은 Feetech 모터의 제한으로 인해 설정하지 않음)
 		if "joint_ranges" in self.data and self.robot:
 			joint_ranges = self.data["joint_ranges"]
 			if "min" in joint_ranges and "max" in joint_ranges:
@@ -355,70 +353,48 @@ class CalibrationManager:
 					joint_middles.append(0.0)
 					self.data["joint_offsets"][i] = 0.0
 			
-			# 측정된 범위를 데이터에 저장
-			self.data["joint_ranges"] = {
-				"min": [self.joint_min_positions[i] if self.joint_min_positions[i] is not None else -180 for i in range(6)],
-				"max": [self.joint_max_positions[i] if self.joint_max_positions[i] is not None else 180 for i in range(6)],
-				"middle": joint_middles
-			}
-			
-			# homing_offset도 저장 (나중에 로드 시 사용)
-			self.data["homing_offsets_steps"] = []
+		# 측정된 범위를 데이터에 저장
+		self.data["joint_ranges"] = {
+			"min": [self.joint_min_positions[i] if self.joint_min_positions[i] is not None else -180 for i in range(6)],
+			"max": [self.joint_max_positions[i] if self.joint_max_positions[i] is not None else 180 for i in range(6)],
+			"middle": joint_middles
+		}
+		
+		# homing_offset은 사용하지 않음 (Feetech 모터는 -180° ~ +180° 지원)
+		
+		# SO-100 어댑터의 캘리브레이션 오프셋 업데이트
+		if hasattr(self.robot, 'calibration_offsets'):
+			self.robot.calibration_offsets = self.data["joint_offsets"]
+			self._log("Calibration offsets applied to robot adapter", "success")
+		
+		# 조인트 제한값 업데이트 (측정된 범위를 제한값으로 사용)
+		if hasattr(self.robot, 'joint_limits'):
+			new_limits = []
 			for i in range(6):
-				middle_deg = joint_middles[i]
-				offset_steps = int(-middle_deg * 4096 / 360)
-				self.data["homing_offsets_steps"].append(offset_steps)
-			
-			# SO-100 어댑터의 캘리브레이션 오프셋 업데이트
-			if hasattr(self.robot, 'calibration_offsets'):
-				self.robot.calibration_offsets = self.data["joint_offsets"]
-				self._log("Calibration offsets applied to robot adapter", "success")
-			
-			# 조인트 제한값 업데이트 (측정된 범위를 제한값으로 사용)
-			if hasattr(self.robot, 'joint_limits'):
-				new_limits = []
-				for i in range(6):
-					min_val = self.joint_min_positions[i] if self.joint_min_positions[i] is not None else -180
-					max_val = self.joint_max_positions[i] if self.joint_max_positions[i] is not None else 180
-					new_limits.append([min_val, max_val])
-				self.robot.joint_limits = new_limits
-				self._log(f"Joint limits updated from calibration: {new_limits}", "success")
-			
-		# FeetechMotorsBus 캘리브레이션 업데이트
-		# 각 조인트의 중간 위치를 0°로 만드는 homing_offset 계산
+				min_val = self.joint_min_positions[i] if self.joint_min_positions[i] is not None else -180
+				max_val = self.joint_max_positions[i] if self.joint_max_positions[i] is not None else 180
+				new_limits.append([min_val, max_val])
+			self.robot.joint_limits = new_limits
+			self._log(f"Joint limits updated from calibration: {new_limits}", "success")
+		
+		# FeetechMotorsBus 기본 캘리브레이션 사용 (homing_offset = 0)
+		# Feetech STS3215는 이미 -180° ~ +180° 범위를 지원하므로
+		# homing_offset 없이 소프트웨어 제한만으로 충분함
 		if hasattr(self.robot, 'motors_bus') and self.robot.motors_bus:
 			try:
 				from .motors.feetech import CalibrationMode
 				
-				# 현재 각 모터의 raw 위치를 읽어서 homing_offset 계산
-				homing_offsets = []
-				for i in range(6):
-					motor_name = self.robot.JOINT_NAMES[i]
-					min_deg = self.joint_min_positions[i] if self.joint_min_positions[i] is not None else -180
-					max_deg = self.joint_max_positions[i] if self.joint_max_positions[i] is not None else 180
-					middle_deg = (min_deg + max_deg) / 2
-					
-					# 현재 위치를 middle_deg로 읽고 있다면, 이 위치가 0°가 되도록 설정
-					# homing_offset은 "실제 스텝 0이 소프트웨어에서 몇 도인지"를 정의
-					# 우리는 middle_deg를 0°로 만들고 싶으므로:
-					# offset_degrees = -middle_deg
-					offset_degrees = -middle_deg
-					
-					# 스텝으로 변환 (4096 steps = 360 degrees)
-					offset_steps = int(offset_degrees * 4096 / 360)
-					homing_offsets.append(offset_steps)
-					
-					self._log(f"  {motor_name}: middle={middle_deg:.1f}°, homing_offset={offset_steps} steps", "info")
+				self._log("Using default calibration (no homing_offset)", "info")
 				
-				# 캘리브레이션 데이터 설정
+				# 기본 캘리브레이션 데이터 설정
 				calibration_data = {
 					"motor_names": list(self.robot.MOTORS.keys()),
 					"calib_mode": [CalibrationMode.DEGREE.name] * len(self.robot.MOTORS),
 					"drive_mode": [0] * len(self.robot.MOTORS),
-					"homing_offset": homing_offsets,
+					"homing_offset": [0] * len(self.robot.MOTORS),  # 모두 0으로 리셋
 				}
 				self.robot.motors_bus.set_calibration(calibration_data)
-				self._log("FeetechMotorsBus calibration with homing_offset applied!", "success")
+				self._log("Default calibration applied!", "success")
 			except Exception as e:
 				self._log(f"Warning: Failed to update FeetechMotorsBus calibration: {e}", "warning")
 		
