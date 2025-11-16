@@ -1442,40 +1442,276 @@
 		<!-- Tutorial Section -->
 		<div class="content-section" id="section-tutorial">
 			<div class="section-header">
-				<h2 data-i18n="section.tutorial.title">Tutorial</h2>
-				<p data-i18n="section.tutorial.description">SO Arm 100/101 Quick Start Guide</p>
+				<h2 data-i18n="section.tutorial.title">초기 설정 가이드</h2>
+				<p data-i18n="section.tutorial.description">SO Arm 100/101을 처음 사용하시나요? 단계별로 따라해보세요!</p>
 			</div>
+			
+			<!-- 튜토리얼 진행 상태 표시 -->
+			<div class="tutorial-progress-header" style="margin-bottom: 24px; padding: 16px; background: var(--bg-secondary); border-radius: 8px;">
+				<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+					<span style="font-size: 14px; color: var(--text-secondary);">진행 상황</span>
+					<span id="tutorial-progress-text" style="font-size: 14px; font-weight: 600; color: var(--accent);">1 / 4 단계</span>
+				</div>
+				<div style="display: flex; gap: 8px;">
+					<div class="tutorial-progress-step" data-step="1" style="flex: 1; height: 4px; background: var(--accent); border-radius: 2px;"></div>
+					<div class="tutorial-progress-step" data-step="2" style="flex: 1; height: 4px; background: var(--border); border-radius: 2px;"></div>
+					<div class="tutorial-progress-step" data-step="3" style="flex: 1; height: 4px; background: var(--border); border-radius: 2px;"></div>
+					<div class="tutorial-progress-step" data-step="4" style="flex: 1; height: 4px; background: var(--border); border-radius: 2px;"></div>
+				</div>
+			</div>
+			
 			<div class="tutorial-page-container">
-				<div class="tutorial-page" id="tutorial-page-1">
-					<div class="tutorial-step-number">1</div>
-					<div class="tutorial-step-content">
-						<h3>로봇 연결</h3>
-						<p>USB 케이블로 로봇을 컴퓨터에 연결하세요.</p>
-						<ul>
-							<li>로봇 전원이 켜져 있는지 확인</li>
-							<li>USB 케이블이 제대로 연결되었는지 확인</li>
-							<li>연결 섹션에서 "Auto-detect" 옵션을 선택하면 자동으로 로봇을 감지합니다</li>
-							<li>"Connect" 버튼을 클릭하여 로봇에 연결합니다</li>
+				<!-- Step 1: 환영 인사 및 설명 -->
+				<div class="tutorial-page active" id="tutorial-page-1">
+					<div style="text-align: center; margin-bottom: 32px;">
+						<div style="font-size: 64px; margin-bottom: 16px;">🤖</div>
+						<h2 style="font-size: 28px; margin-bottom: 12px; color: var(--text-primary);">Rosota Copilot에 오신 것을 환영합니다!</h2>
+						<p style="font-size: 16px; color: var(--text-secondary); line-height: 1.6; max-width: 800px; margin: 0 auto;">
+							본 프로그램은 SO Arm 100/101을 처음 접하는 유저를 위해 쉽게 가이드하기 위한 프로그램입니다.<br>
+							이 튜토리얼을 따라하시면 로봇의 초기 설정부터 제어까지 모든 과정을 단계별로 완료할 수 있습니다.<br>
+							각 단계를 완료하면 다음 단계로 자동으로 진행됩니다.
+						</p>
+					</div>
+					
+					<div class="card" style="margin-bottom: 24px;">
+						<h3 style="margin-bottom: 16px; color: var(--text-primary);">📋 이 튜토리얼에서 배우게 될 것들</h3>
+						<ul style="list-style: none; padding: 0;">
+							<li style="padding: 12px 0; border-bottom: 1px solid var(--border); display: flex; align-items: start;">
+								<span style="font-size: 20px; margin-right: 12px;">1️⃣</span>
+								<div>
+									<strong style="color: var(--text-primary);">모터 설정</strong>
+									<p style="margin: 4px 0 0 0; color: var(--text-secondary); font-size: 14px;">각 모터의 ID를 설정하고 초기화합니다</p>
+								</div>
+							</li>
+							<li style="padding: 12px 0; border-bottom: 1px solid var(--border); display: flex; align-items: start;">
+								<span style="font-size: 20px; margin-right: 12px;">2️⃣</span>
+								<div>
+									<strong style="color: var(--text-primary);">캘리브레이션</strong>
+									<p style="margin: 4px 0 0 0; color: var(--text-secondary); font-size: 14px;">로봇의 조인트 범위를 측정하여 정확한 제어를 가능하게 합니다</p>
+								</div>
+							</li>
+							<li style="padding: 12px 0; display: flex; align-items: start;">
+								<span style="font-size: 20px; margin-right: 12px;">3️⃣</span>
+								<div>
+									<strong style="color: var(--text-primary);">키보드 조작</strong>
+									<p style="margin: 4px 0 0 0; color: var(--text-secondary); font-size: 14px;">키보드로 로봇을 제어하는 방법을 배웁니다</p>
+								</div>
+							</li>
 						</ul>
 					</div>
+					
+					<div style="text-align: center; padding: 20px; background: var(--bg-secondary); border-radius: 8px; margin-bottom: 24px;">
+						<p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 8px;">준비되셨나요?</p>
+						<p style="color: var(--text-primary); font-size: 16px; font-weight: 600;">아래 "시작하기" 버튼을 클릭하여 첫 번째 단계로 진행하세요!</p>
+					</div>
 				</div>
+				
+				<!-- Step 2: 모터 셋업 (내장) -->
 				<div class="tutorial-page" id="tutorial-page-2" style="display: none;">
-					<div class="tutorial-step-number">2</div>
-					<div class="tutorial-step-content">
-						<h3>캘리브레이션</h3>
-						<p>로봇을 정확하게 제어하기 위해 캘리브레이션이 필요합니다.</p>
-						<ul>
-							<li>"Calibration" 섹션으로 이동</li>
-							<li>"📋 Open Calibration Wizard" 버튼 클릭</li>
-							<li>마법사의 단계를 따라 캘리브레이션을 완료하세요</li>
-							<li>각 단계에서 로봇이 올바른 위치에 있는지 확인하세요</li>
-						</ul>
+					<div style="text-align: center; margin-bottom: 24px;">
+						<div style="font-size: 48px; margin-bottom: 16px;">⚙️</div>
+						<h2 style="font-size: 24px; margin-bottom: 12px; color: var(--text-primary);">모터 설정</h2>
+						<p style="font-size: 16px; color: var(--text-secondary); line-height: 1.6;">
+							로봇의 각 모터에 고유한 ID를 설정해야 합니다.<br>
+							아래 마법사를 따라 각 모터를 순서대로 설정하세요.
+						</p>
+					</div>
+					
+					<!-- 모터 셋업 마법사 내장 -->
+					<div class="card">
+						<div class="card-title">Motor Setup Wizard</div>
+						
+						<!-- Step 1: Robot Type Selection -->
+						<div id="tutorial-motor-setup-step-1" class="motor-setup-step">
+							<h3>Step 1: Select Robot Type</h3>
+							<p>Choose whether you're configuring a follower or leader arm.</p>
+							<div class="btn-group" style="margin-top: 16px;">
+								<button class="btn" id="tutorial-motor-setup-follower-btn" data-robot-type="follower">
+									Follower Arm
+								</button>
+								<button class="btn" id="tutorial-motor-setup-leader-btn" data-robot-type="leader">
+									Leader Arm
+								</button>
+							</div>
+						</div>
+						
+						<!-- Step 2: Port Finding -->
+						<div id="tutorial-motor-setup-step-2" class="motor-setup-step" style="display: none;">
+							<h3>Step 2: Find MotorsBus Port</h3>
+							<p>The system will try to find the port automatically. If it fails, you may need to disconnect the USB cable temporarily.</p>
+							<div style="margin-top: 16px; padding: 12px; background: rgba(59, 130, 246, 0.1); border-left: 3px solid var(--accent); border-radius: 4px;">
+								<p style="font-size: 13px; color: var(--text-secondary); margin: 0;">
+									<strong>💡 Why disconnect USB?</strong><br>
+									When multiple USB devices are connected, disconnecting helps identify which port belongs to the MotorsBus by comparing port lists before and after disconnection.
+								</p>
+							</div>
+							<div class="btn-group" style="margin-top: 16px;">
+								<button class="btn" id="tutorial-motor-setup-find-port-btn">
+									Find Port
+								</button>
+							</div>
+							<div id="tutorial-motor-setup-port-result" style="margin-top: 16px; padding: 12px; background: var(--bg-secondary); border-radius: 8px; display: none;">
+								<p><strong>Port Found:</strong> <span id="tutorial-motor-setup-port-value"></span></p>
+								<p id="tutorial-motor-setup-port-method" style="margin-top: 8px; font-size: 13px; color: var(--text-secondary);"></p>
+							</div>
+						</div>
+						
+						<!-- Step 3: Motor Configuration -->
+						<div id="tutorial-motor-setup-step-3" class="motor-setup-step" style="display: none;">
+							<h3>Step 3: Configure Motors</h3>
+							<p>Configure each motor one by one. Connect only one motor at a time. Click on any motor in the list to select it.</p>
+							
+							<div id="tutorial-motor-setup-motors-list" style="margin-top: 16px;">
+								<!-- Motors will be dynamically added here -->
+							</div>
+							
+							<div id="tutorial-motor-setup-current-motor" style="margin-top: 24px; padding: 16px; background: var(--bg-secondary); border-radius: 8px; display: none;">
+								<h4>Current Motor:</h4>
+								<p id="tutorial-motor-setup-current-motor-name" style="font-weight: 600; margin-top: 8px;"></p>
+								<p style="margin-top: 8px; font-size: 13px; color: var(--text-secondary);">
+									Make sure only this motor is connected to the controller board.
+								</p>
+								<div class="btn-group" style="margin-top: 16px;">
+									<button class="btn" id="tutorial-motor-setup-configure-btn">
+										Configure Motor
+									</button>
+									<button class="btn btn-secondary" id="tutorial-motor-setup-check-id-btn">
+										Check Motor ID
+									</button>
+									<button class="btn btn-secondary" id="tutorial-motor-setup-reset-motor-btn">
+										Reset Motor ID
+									</button>
+									<button class="btn btn-secondary" id="tutorial-motor-setup-skip-btn">
+										Skip
+									</button>
+								</div>
+								<div id="tutorial-motor-setup-id-result" style="margin-top: 12px; padding: 12px; background: var(--bg-primary); border-radius: 6px; display: none;">
+									<p id="tutorial-motor-setup-id-result-text" style="margin: 0; font-size: 14px;"></p>
+								</div>
+								<p style="margin-top: 12px; font-size: 12px; color: var(--text-secondary);">
+									If a motor is already configured, use "Reset Motor ID" to reset it to ID 1, then configure it again.
+								</p>
+							</div>
+						</div>
+						
+						<!-- Progress -->
+						<div id="tutorial-motor-setup-progress" style="margin-top: 24px; display: none;">
+							<div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+								<span>Progress</span>
+								<span id="tutorial-motor-setup-progress-text">0 / 6</span>
+							</div>
+							<div style="height: 8px; background: var(--bg-secondary); border-radius: 4px; overflow: hidden;">
+								<div id="tutorial-motor-setup-progress-bar" style="height: 100%; background: var(--accent); width: 0%; transition: width 0.3s;"></div>
+							</div>
+						</div>
+						
+						<!-- Status Messages -->
+						<div id="tutorial-motor-setup-status" style="margin-top: 16px; padding: 12px; border-radius: 8px; display: none;"></div>
+						
+						<!-- Actions -->
+						<div class="btn-group" style="margin-top: 24px;">
+							<button class="btn btn-secondary" id="tutorial-motor-setup-reset-btn" style="display: none;">
+								Reset
+							</button>
+						</div>
+					</div>
+					
+					<div id="tutorial-motor-setup-complete" style="padding: 16px; background: var(--bg-secondary); border-radius: 8px; text-align: center; display: none; margin-top: 24px;">
+						<div style="font-size: 20px; margin-bottom: 8px;">✅</div>
+						<p style="color: var(--success); font-weight: 600; margin: 0;">모터 설정이 완료되었습니다!</p>
+						<p style="color: var(--text-secondary); font-size: 14px; margin: 4px 0 0 0;">2초 후 자동으로 다음 단계로 진행됩니다.</p>
 					</div>
 				</div>
+				
+				<!-- Step 3: 캘리브레이션 (내장) -->
 				<div class="tutorial-page" id="tutorial-page-3" style="display: none;">
-					<div class="tutorial-step-content">
-						<h3>키보드 제어</h3>
-						<p>키보드로 로봇을 제어할 수 있습니다.</p>
+					<div style="text-align: center; margin-bottom: 24px;">
+						<div style="font-size: 48px; margin-bottom: 16px;">📐</div>
+						<h2 style="font-size: 24px; margin-bottom: 12px; color: var(--text-primary);">캘리브레이션</h2>
+						<p style="font-size: 16px; color: var(--text-secondary); line-height: 1.6;">
+							로봇의 각 조인트가 움직일 수 있는 범위를 측정합니다.<br>
+							이 과정을 통해 로봇을 안전하고 정확하게 제어할 수 있습니다.
+						</p>
+					</div>
+					
+					<!-- 캘리브레이션 마법사 내장 -->
+					<div class="card full-width" id="tutorial-calibration-wizard">
+						<div class="card-title">📋 Calibration Wizard</div>
+						<div id="tutorial-wizard-progress" style="margin-bottom: 20px;">
+							<div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+								<span style="font-size: 14px; color: var(--text-secondary);">Progress</span>
+								<span id="tutorial-wizard-step-text" style="font-size: 14px; font-weight: 600;">Step 0/2</span>
+							</div>
+							<div style="height: 8px; background: var(--bg-secondary); border-radius: 4px; overflow: hidden;">
+								<div id="tutorial-wizard-progress-bar" style="height: 100%; background: var(--accent); width: 0%; transition: width 0.3s;"></div>
+							</div>
+						</div>
+						<div id="tutorial-wizard-instructions" style="padding: 16px; background: var(--bg-secondary); border-radius: 8px; margin-bottom: 16px; min-height: 80px;">
+							<p id="tutorial-wizard-instruction-text" style="margin: 0; color: var(--text-primary); line-height: 1.8; font-size: 14px; white-space: pre-line;">
+								Ready to start calibration. Make sure the robot is connected and powered on.
+							</p>
+						</div>
+						
+						<!-- 실시간 조인트 위치 표시 -->
+						<div id="tutorial-wizard-realtime-info" style="display: none; margin-bottom: 16px;">
+							<div style="padding: 16px; background: var(--bg-primary); border-radius: 8px; border: 1px solid var(--border);">
+								<h4 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600;">실시간 조인트 위치</h4>
+								<div id="tutorial-wizard-joints-list" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
+									<!-- 조인트별 정보가 여기에 동적으로 추가됨 -->
+								</div>
+							</div>
+						</div>
+						
+						<div class="btn-group">
+							<button class="btn" id="tutorial-wizard-start-btn">▶ Start Calibration</button>
+							<button class="btn" id="tutorial-wizard-next-btn" style="display: none;">Next Step →</button>
+							<button class="btn btn-secondary" id="tutorial-wizard-record-min-btn" style="display: none;">Record Min</button>
+							<button class="btn btn-secondary" id="tutorial-wizard-record-max-btn" style="display: none;">Record Max</button>
+							<button class="btn" id="tutorial-wizard-auto-record-btn" style="display: none;">✓ 자동 기록</button>
+							<button class="btn btn-secondary" id="tutorial-wizard-cancel-btn" style="display: none;">Cancel</button>
+						</div>
+					</div>
+					
+					<div id="tutorial-calibration-complete" style="padding: 16px; background: var(--bg-secondary); border-radius: 8px; text-align: center; display: none; margin-top: 24px;">
+						<div style="font-size: 20px; margin-bottom: 8px;">✅</div>
+						<p style="color: var(--success); font-weight: 600; margin: 0;">캘리브레이션이 완료되었습니다!</p>
+						<p style="color: var(--text-secondary); font-size: 14px; margin: 4px 0 0 0;">2초 후 자동으로 다음 단계로 진행됩니다.</p>
+					</div>
+				</div>
+				
+				<!-- Step 4: 키보드 조작 (내장) -->
+				<div class="tutorial-page" id="tutorial-page-4" style="display: none;">
+					<div style="text-align: center; margin-bottom: 24px;">
+						<div style="font-size: 48px; margin-bottom: 16px;">⌨️</div>
+						<h2 style="font-size: 24px; margin-bottom: 12px; color: var(--text-primary);">키보드 조작</h2>
+						<p style="font-size: 16px; color: var(--text-secondary); line-height: 1.6;">
+							이제 키보드로 로봇을 제어하는 방법을 배워보겠습니다.<br>
+							아래 키보드 단축키를 참고하여 로봇을 움직여보세요!
+						</p>
+					</div>
+					
+					<!-- 키보드 제어 패널 내장 -->
+					<div class="card full-width">
+						<div class="card-title">Keyboard Control</div>
+						<p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 16px;">
+							브라우저에 포커스를 두고 키보드로 로봇을 제어하세요.
+						</p>
+						<div class="btn-group" style="margin-bottom: 16px;">
+							<button class="btn" id="tutorial-start-control-btn">▶ Start Control</button>
+							<button class="btn btn-secondary" id="tutorial-stop-control-btn" disabled>⏹ Stop Control</button>
+						</div>
+						<div id="tutorial-control-status" style="padding: 8px 12px; background: var(--bg-secondary); border-radius: 6px; margin-bottom: 16px; font-size: 13px;">
+							<span style="color: var(--text-secondary);">Status: </span>
+							<span id="tutorial-control-status-text" style="color: var(--text-secondary);">Stopped</span>
+						</div>
+						<div class="keyboard-hints" id="tutorial-keyboard-hints">
+							<!-- 키보드 힌트는 JavaScript에서 동적으로 생성 -->
+						</div>
+					</div>
+					
+					<!-- 키보드 단축키 가이드 -->
+					<div class="card" style="margin-top: 24px;">
+						<h3 style="margin-bottom: 16px; color: var(--text-primary);">⌨️ 키보드 단축키</h3>
 						<div class="tutorial-keyboard-guide">
 							<div class="keyboard-mode">
 								<h4>Joint Mode (조인트 모드)</h4>
@@ -1485,7 +1721,7 @@
 									<li><strong>U/O</strong>: 조인트 3 ±</li>
 									<li><strong>7/9</strong>: 조인트 4 ±</li>
 									<li><strong>8/0</strong>: 조인트 5 ±</li>
-									<li><strong>Y/H</strong>: 조인트 6 ±</li>
+									<li><strong>Y/H</strong>: 조인트 6 (Gripper) ±</li>
 								</ul>
 							</div>
 							<div class="keyboard-mode">
@@ -1502,22 +1738,34 @@
 							<div class="keyboard-mode">
 								<h4>공통</h4>
 								<ul>
-									<li><strong>M</strong>: 모드 전환</li>
+									<li><strong>M</strong>: 모드 전환 (Joint ↔ Cartesian ↔ Gripper)</li>
 									<li><strong>+/-</strong>: 속도 조절</li>
 									<li><strong>Space</strong>: 긴급 정지</li>
 								</ul>
 							</div>
 						</div>
 					</div>
+					
+					<div class="card" style="background: var(--bg-secondary); padding: 20px; text-align: center; margin-top: 24px;">
+						<div style="font-size: 32px; margin-bottom: 12px;">🎉</div>
+						<h3 style="margin-bottom: 8px; color: var(--text-primary);">축하합니다!</h3>
+						<p style="color: var(--text-secondary); font-size: 14px; margin: 0;">
+							모든 초기 설정이 완료되었습니다.<br>
+							이제 로봇을 자유롭게 제어할 수 있습니다!
+						</p>
+					</div>
 				</div>
-				<div class="tutorial-navigation">
+				
+				<!-- 네비게이션 -->
+				<div class="tutorial-navigation" style="margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--border);">
 					<button class="btn btn-secondary" id="tutorial-page-prev" style="display: none;">&lt; 이전</button>
 					<div class="tutorial-indicators">
 						<span class="tutorial-dot active" data-page="1"></span>
 						<span class="tutorial-dot" data-page="2"></span>
 						<span class="tutorial-dot" data-page="3"></span>
+						<span class="tutorial-dot" data-page="4"></span>
 					</div>
-					<button class="btn" id="tutorial-page-next">다음 &gt;</button>
+					<button class="btn" id="tutorial-page-next">시작하기 &gt;</button>
 				</div>
 			</div>
 		</div>

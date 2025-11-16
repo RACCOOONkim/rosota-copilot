@@ -662,7 +662,11 @@
 	});
 
 	// Connect button
-	connectBtn?.addEventListener("click", async () => {
+	if (connectBtn) {
+		connectBtn.addEventListener("click", async (e) => {
+			console.log("[Connection] Connect button clicked");
+			e.preventDefault();
+			e.stopPropagation();
 		const connType = connTypeEl.value;
 		const selectedPort = portSelectEl?.value || "";
 		const payload = {
@@ -696,21 +700,33 @@
 			updateStatus("Connection Error", false);
 			log(`Connection error: ${error.message}`, "error");
 		}
-	});
+		});
+		console.log("[Connection] Connect button event listener registered");
+	} else {
+		console.error("[Connection] connectBtn not found!");
+	}
 
 	// Disconnect button
-	disconnectBtn?.addEventListener("click", async () => {
-		try {
-			const res = await fetch("/api/disconnect", { method: "POST" });
-			const json = await res.json();
-			if (json.ok) {
-				updateStatus("Disconnected", false, null);
-				log("Robot disconnected", "info");
+	if (disconnectBtn) {
+		disconnectBtn.addEventListener("click", async (e) => {
+			console.log("[Connection] Disconnect button clicked");
+			e.preventDefault();
+			e.stopPropagation();
+			try {
+				const res = await fetch("/api/disconnect", { method: "POST" });
+				const json = await res.json();
+				if (json.ok) {
+					updateStatus("Disconnected", false, null);
+					log("Robot disconnected", "info");
+				}
+			} catch (error) {
+				log(`Disconnect error: ${error.message}`, "error");
 			}
-		} catch (error) {
-			log(`Disconnect error: ${error.message}`, "error");
-		}
-	});
+		});
+		console.log("[Connection] Disconnect button event listener registered");
+	} else {
+		console.warn("[Connection] disconnectBtn not found (this is normal if not connected)");
+	}
 
 	// 로딩 상태 관리
 	function setButtonLoading(button, loading) {
@@ -1308,8 +1324,11 @@
 	const contentSections = document.querySelectorAll(".content-section");
 
 	menuItems.forEach((item) => {
-		item.addEventListener("click", () => {
+		item.addEventListener("click", (e) => {
+			e.preventDefault();
+			e.stopPropagation();
 			const section = item.getAttribute("data-section");
+			console.log("[Menu] Section clicked:", section);
 			
 			// Update active menu item
 			menuItems.forEach((m) => m.classList.remove("active"));
@@ -1320,16 +1339,31 @@
 			const targetSection = document.getElementById(`section-${section}`);
 			if (targetSection) {
 				targetSection.classList.add("active");
+				console.log("[Menu] Section activated:", section);
+			} else {
+				console.error("[Menu] Section not found:", section);
 			}
 		});
 	});
+	console.log("[Menu] Menu items event listeners registered:", menuItems.length);
 
 	socket.on("robot:auto_connected", (data) => {
+		console.log("[Auto-connect] Received auto_connected event:", data);
 		updateStatus("Connected", true, {
 			port: data.port || "-",
 			baudrate: data.baudrate || "115200"
 		});
 		log(`Auto-connected to robot on ${data.port}`, "success");
+	});
+	
+	socket.on("robot:auto_connect_error", (data) => {
+		console.log("[Auto-connect] Auto-connect error:", data);
+		log(`Auto-connect failed: ${data.message || "Unknown error"}`, "error");
+	});
+	
+	socket.on("robot:auto_connect_attempt", (data) => {
+		console.log("[Auto-connect] Attempting to connect:", data);
+		log(`Attempting to auto-connect to robot...`, "info");
 	});
 
 	// 캘리브레이션 마법사
@@ -1642,9 +1676,18 @@
 
 	
 	// Initialize
+	console.log("[Init] Starting initialization...");
+	console.log("[Init] DOM ready state:", document.readyState);
+	
+	// DOM 요소 존재 확인
+	console.log("[Init] connectBtn:", document.getElementById("connect-btn"));
+	console.log("[Init] tutorialPageNext:", document.getElementById("tutorial-page-next"));
+	console.log("[Init] menuItems count:", document.querySelectorAll(".menu-item").length);
+	
 	updateKeyboardHints("joint");
 	loadPorts(); // Load ports on page load
 	log("Rosota Copilot initialized", "success");
+	console.log("[Init] Initialization complete");
 	
 	// 초기 모드 텍스트 번역 적용
 	const initialLanguage = getInitialLanguage();
@@ -1663,13 +1706,23 @@
 	// 언어 적용
 	applyLanguage(initialLanguage);
 	
-	// 튜토리얼 페이지 네비게이션
+	// ========== Tutorial Page Navigation ==========
 	const tutorialPagePrev = document.getElementById("tutorial-page-prev");
 	const tutorialPageNext = document.getElementById("tutorial-page-next");
 	const tutorialDots = document.querySelectorAll(".tutorial-dot");
+	const tutorialProgressText = document.getElementById("tutorial-progress-text");
+	const tutorialProgressSteps = document.querySelectorAll(".tutorial-progress-step");
+	
+	// 튜토리얼 페이지 내장 기능 DOM 요소들
+	const tutorialMotorSetupStatus = document.getElementById("tutorial-motor-setup-status");
+	const tutorialCalibrationStatus = document.getElementById("tutorial-calibration-status");
+	
+	// 디버깅: 버튼 존재 확인
+	console.log("[Tutorial] tutorialPageNext:", tutorialPageNext);
+	console.log("[Tutorial] tutorialPagePrev:", tutorialPagePrev);
 	
 	let currentTutorialPage = 1;
-	const totalTutorialPages = 3;
+	const totalTutorialPages = 4;
 
 	function updateTutorialPage() {
 		// 모든 페이지 숨기기
@@ -1683,7 +1736,7 @@
 		// 현재 페이지 표시
 		const currentPage = document.getElementById(`tutorial-page-${currentTutorialPage}`);
 		if (currentPage) {
-			currentPage.style.display = "flex";
+			currentPage.style.display = "block";
 		}
 
 		// 이전 버튼 표시/숨기기
@@ -1693,12 +1746,28 @@
 
 		// 다음 버튼 텍스트 변경
 		if (tutorialPageNext) {
-			if (currentTutorialPage === totalTutorialPages) {
+			if (currentTutorialPage === 1) {
+				tutorialPageNext.textContent = "시작하기 >";
+			} else if (currentTutorialPage === totalTutorialPages) {
 				tutorialPageNext.textContent = "완료";
 			} else {
 				tutorialPageNext.textContent = "다음 >";
 			}
 		}
+
+		// 진행 상황 업데이트
+		if (tutorialProgressText) {
+			tutorialProgressText.textContent = `${currentTutorialPage} / ${totalTutorialPages} 단계`;
+		}
+		
+		// 진행 바 업데이트
+		tutorialProgressSteps.forEach((step, index) => {
+			if (index + 1 <= currentTutorialPage) {
+				step.style.background = "var(--accent)";
+			} else {
+				step.style.background = "var(--border)";
+			}
+		});
 
 		// 인디케이터 업데이트
 		tutorialDots.forEach((dot, index) => {
@@ -1708,29 +1777,866 @@
 				dot.classList.remove("active");
 			}
 		});
+		
+		// 각 단계별 상태 체크
+		checkTutorialStepStatus();
+		
+		// Step 4일 때 키보드 힌트 업데이트
+		if (currentTutorialPage === 4) {
+			updateTutorialKeyboardHints();
+		}
+	}
+	
+	// 튜토리얼 단계별 완료 상태 체크
+	function checkTutorialStepStatus() {
+		// Step 2: 모터 셋업 완료 체크는 updateTutorialCurrentMotor에서 처리됨
+		// 여기서는 주기적 체크 인터벌만 관리
+		if (currentTutorialPage === 2) {
+			checkMotorSetupComplete();
+		} else {
+			if (window.tutorialMotorSetupCheckInterval) {
+				clearInterval(window.tutorialMotorSetupCheckInterval);
+				window.tutorialMotorSetupCheckInterval = null;
+			}
+		}
+		
+		// Step 3: 캘리브레이션 완료 체크
+		if (currentTutorialPage === 3) {
+			checkCalibrationComplete();
+			// 주기적으로 체크 (5초마다)
+			if (!window.tutorialCalibrationCheckInterval) {
+				window.tutorialCalibrationCheckInterval = setInterval(() => {
+					if (currentTutorialPage === 3) {
+						checkCalibrationComplete();
+					} else {
+						clearInterval(window.tutorialCalibrationCheckInterval);
+						window.tutorialCalibrationCheckInterval = null;
+					}
+				}, 5000);
+			}
+		} else {
+			if (window.tutorialCalibrationCheckInterval) {
+				clearInterval(window.tutorialCalibrationCheckInterval);
+				window.tutorialCalibrationCheckInterval = null;
+			}
+		}
+	}
+	
+	// 모터 셋업 완료 체크 (튜토리얼 페이지 내장 기능 사용)
+	async function checkMotorSetupComplete() {
+		// 튜토리얼 페이지의 모터 셋업 상태 확인
+		if (tutorialMotorSetupState.motors.length > 0 && 
+		    tutorialMotorSetupState.configuredMotors.size === tutorialMotorSetupState.motors.length) {
+			if (tutorialMotorSetupComplete) {
+				tutorialMotorSetupComplete.style.display = "block";
+			}
+			// 2초 후 자동으로 다음 단계로
+			setTimeout(() => {
+				if (currentTutorialPage === 2) {
+					currentTutorialPage = 3;
+					updateTutorialPage();
+				}
+			}, 2000);
+		} else {
+			if (tutorialMotorSetupComplete) {
+				tutorialMotorSetupComplete.style.display = "none";
+			}
+		}
+	}
+	
+	// 캘리브레이션 완료 체크
+	async function checkCalibrationComplete() {
+		try {
+			const response = await fetch("/api/calibration/status");
+			const json = await response.json();
+			
+			if (response.ok && json.calibrated) {
+				const tutorialCalibrationComplete = document.getElementById("tutorial-calibration-complete");
+				if (tutorialCalibrationComplete) {
+					tutorialCalibrationComplete.style.display = "block";
+				}
+				// 2초 후 자동으로 다음 단계로
+				setTimeout(() => {
+					if (currentTutorialPage === 3) {
+						currentTutorialPage = 4;
+						updateTutorialPage();
+					}
+				}, 2000);
+			} else {
+				const tutorialCalibrationComplete = document.getElementById("tutorial-calibration-complete");
+				if (tutorialCalibrationComplete) {
+					tutorialCalibrationComplete.style.display = "none";
+				}
+			}
+		} catch (error) {
+			console.error("Failed to check calibration status:", error);
+		}
+	}
+	
+	// 튜토리얼 캘리브레이션 마법사 연결
+	const tutorialWizardStartBtn = document.getElementById("tutorial-wizard-start-btn");
+	const tutorialWizardNextBtn = document.getElementById("tutorial-wizard-next-btn");
+	const tutorialWizardCancelBtn = document.getElementById("tutorial-wizard-cancel-btn");
+	const tutorialWizardRecordMinBtn = document.getElementById("tutorial-wizard-record-min-btn");
+	const tutorialWizardRecordMaxBtn = document.getElementById("tutorial-wizard-record-max-btn");
+	const tutorialWizardAutoRecordBtn = document.getElementById("tutorial-wizard-auto-record-btn");
+	const tutorialWizardStepText = document.getElementById("tutorial-wizard-step-text");
+	const tutorialWizardProgressBar = document.getElementById("tutorial-wizard-progress-bar");
+	const tutorialWizardInstructionText = document.getElementById("tutorial-wizard-instruction-text");
+	const tutorialWizardRealtimeInfo = document.getElementById("tutorial-wizard-realtime-info");
+	const tutorialWizardJointsList = document.getElementById("tutorial-wizard-joints-list");
+	
+	let tutorialWizardActive = false;
+	let tutorialRealtimeUpdateInterval = null;
+	
+	// 튜토리얼 캘리브레이션 마법사: Start
+	tutorialWizardStartBtn?.addEventListener("click", async () => {
+		if (!isConnected) {
+			log("Cannot start calibration: robot not connected", "error");
+			return;
+		}
+		
+		tutorialWizardActive = true;
+		tutorialWizardStartBtn.style.display = "none";
+		tutorialWizardNextBtn.style.display = "block";
+		tutorialWizardCancelBtn.style.display = "block";
+		
+		await executeTutorialWizardStep();
+	});
+	
+	// 튜토리얼 캘리브레이션 마법사: Next
+	tutorialWizardNextBtn?.addEventListener("click", async () => {
+		await executeTutorialWizardStep();
+	});
+	
+	// 튜토리얼 캘리브레이션 마법사: Cancel
+	tutorialWizardCancelBtn?.addEventListener("click", async () => {
+		if (tutorialWizardActive) {
+			try {
+				await fetch("/api/calibration/wizard/reset", { method: "POST" });
+			} catch (e) {
+				console.error("Failed to reset wizard:", e);
+			}
+		}
+		tutorialWizardActive = false;
+		tutorialWizardStartBtn.style.display = "block";
+		tutorialWizardNextBtn.style.display = "none";
+		tutorialWizardRecordMinBtn.style.display = "none";
+		tutorialWizardRecordMaxBtn.style.display = "none";
+		tutorialWizardAutoRecordBtn.style.display = "none";
+		tutorialWizardCancelBtn.style.display = "none";
+		tutorialWizardRealtimeInfo.style.display = "none";
+		stopTutorialRealtimeUpdate();
+		log("Calibration wizard cancelled", "info");
+	});
+	
+	// 튜토리얼 캘리브레이션 마법사: Auto Record
+	tutorialWizardAutoRecordBtn?.addEventListener("click", async () => {
+		try {
+			setButtonLoading(tutorialWizardAutoRecordBtn, true);
+			const res = await fetch("/api/calibration/wizard/auto-record", { method: "POST" });
+			const json = await res.json();
+			
+			if (json.ok) {
+				log(`Auto-recorded min/max for joint ${json.status.current_joint_index}`, "success");
+				updateTutorialRealtimeInfo(json.status);
+				if (json.status.current_joint_index >= 6) {
+					await executeTutorialWizardStep();
+				} else {
+					await executeTutorialWizardStep();
+				}
+			} else {
+				log(`Failed to auto-record: ${json.detail || json.message}`, "error");
+			}
+		} catch (error) {
+			log(`Error auto-recording: ${error.message}`, "error");
+		} finally {
+			setButtonLoading(tutorialWizardAutoRecordBtn, false);
+		}
+	});
+	
+	// 튜토리얼 캘리브레이션 마법사: Record Min
+	tutorialWizardRecordMinBtn?.addEventListener("click", async () => {
+		try {
+			setButtonLoading(tutorialWizardRecordMinBtn, true);
+			const res = await fetch("/api/calibration/wizard/record-min", { method: "POST" });
+			const json = await res.json();
+			
+			if (json.ok) {
+				log(`Minimum position recorded for joint ${json.status.current_joint_index + 1}`, "success");
+				updateTutorialRealtimeInfo(json.status);
+				if (json.status.current_joint_index >= 6) {
+					await executeTutorialWizardStep();
+				}
+			} else {
+				log(`Failed to record min: ${json.detail || json.message}`, "error");
+			}
+		} catch (error) {
+			log(`Error recording min: ${error.message}`, "error");
+		} finally {
+			setButtonLoading(tutorialWizardRecordMinBtn, false);
+		}
+	});
+	
+	// 튜토리얼 캘리브레이션 마법사: Record Max
+	tutorialWizardRecordMaxBtn?.addEventListener("click", async () => {
+		try {
+			setButtonLoading(tutorialWizardRecordMaxBtn, true);
+			const res = await fetch("/api/calibration/wizard/record-max", { method: "POST" });
+			const json = await res.json();
+			
+			if (json.ok) {
+				log(`Maximum position recorded for joint ${json.status.current_joint_index}`, "success");
+				updateTutorialRealtimeInfo(json.status);
+				if (json.status.current_joint_index >= 6) {
+					await executeTutorialWizardStep();
+				} else {
+					await executeTutorialWizardStep();
+				}
+			} else {
+				log(`Failed to record max: ${json.detail || json.message}`, "error");
+			}
+		} catch (error) {
+			log(`Error recording max: ${error.message}`, "error");
+		} finally {
+			setButtonLoading(tutorialWizardRecordMaxBtn, false);
+		}
+	});
+	
+	async function executeTutorialWizardStep() {
+		if (!tutorialWizardActive) return;
+		
+		setButtonLoading(tutorialWizardNextBtn, true);
+		try {
+			const res = await fetch("/api/calibration/wizard/step", { method: "POST" });
+			const json = await res.json();
+			
+			if (json.ok) {
+				const step = json.step || 0;
+				const maxSteps = json.max_steps || 2;
+				const progress = (step / maxSteps) * 100;
+				
+				tutorialWizardStepText.textContent = `Step ${step}/${maxSteps}`;
+				tutorialWizardProgressBar.style.width = `${progress}%`;
+				tutorialWizardInstructionText.textContent = json.message || "";
+				
+				if (step === 2) {
+					tutorialWizardRealtimeInfo.style.display = "block";
+					tutorialWizardRecordMinBtn.style.display = "inline-block";
+					tutorialWizardRecordMaxBtn.style.display = "inline-block";
+					tutorialWizardAutoRecordBtn.style.display = "inline-block";
+					tutorialWizardNextBtn.style.display = "none";
+					startTutorialRealtimeUpdate();
+				} else {
+					tutorialWizardRealtimeInfo.style.display = "none";
+					tutorialWizardRecordMinBtn.style.display = "none";
+					tutorialWizardRecordMaxBtn.style.display = "none";
+					tutorialWizardAutoRecordBtn.style.display = "none";
+					tutorialWizardNextBtn.style.display = "block";
+					stopTutorialRealtimeUpdate();
+				}
+				
+				if (json.status === "success") {
+					tutorialWizardActive = false;
+					tutorialWizardNextBtn.style.display = "none";
+					tutorialWizardRecordMinBtn.style.display = "none";
+					tutorialWizardRecordMaxBtn.style.display = "none";
+					tutorialWizardAutoRecordBtn.style.display = "none";
+					tutorialWizardCancelBtn.textContent = "Close";
+					stopTutorialRealtimeUpdate();
+					log("Calibration completed successfully!", "success");
+					
+					// 완료 메시지 표시 및 자동 진행
+					const tutorialCalibrationComplete = document.getElementById("tutorial-calibration-complete");
+					if (tutorialCalibrationComplete) {
+						tutorialCalibrationComplete.style.display = "block";
+					}
+					setTimeout(() => {
+						if (currentTutorialPage === 3) {
+							currentTutorialPage = 4;
+							updateTutorialPage();
+						}
+					}, 2000);
+				} else if (json.status === "error") {
+					tutorialWizardActive = false;
+					tutorialWizardNextBtn.style.display = "none";
+					tutorialWizardRecordMinBtn.style.display = "none";
+					tutorialWizardRecordMaxBtn.style.display = "none";
+					tutorialWizardAutoRecordBtn.style.display = "none";
+					stopTutorialRealtimeUpdate();
+					log(`Calibration error: ${json.message}`, "error");
+				}
+			} else {
+				log(`Calibration step failed: ${json.detail || json.message}`, "error");
+				tutorialWizardActive = false;
+				stopTutorialRealtimeUpdate();
+			}
+		} catch (error) {
+			log(`Calibration step error: ${error.message}`, "error");
+			tutorialWizardActive = false;
+			stopTutorialRealtimeUpdate();
+		} finally {
+			setButtonLoading(tutorialWizardNextBtn, false);
+		}
+	}
+	
+	function startTutorialRealtimeUpdate() {
+		stopTutorialRealtimeUpdate();
+		updateTutorialRealtimePositions();
+		tutorialRealtimeUpdateInterval = setInterval(() => {
+			updateTutorialRealtimePositions();
+		}, 100);
+	}
+	
+	function stopTutorialRealtimeUpdate() {
+		if (tutorialRealtimeUpdateInterval) {
+			clearInterval(tutorialRealtimeUpdateInterval);
+			tutorialRealtimeUpdateInterval = null;
+		}
+	}
+	
+	async function updateTutorialRealtimePositions() {
+		try {
+			const res = await fetch("/api/calibration/wizard/realtime");
+			const json = await res.json();
+			
+			if (json.ok && json.status) {
+				updateTutorialRealtimeInfo(json.status);
+			}
+		} catch (error) {
+			console.error("Failed to update realtime positions:", error);
+		}
+	}
+	
+	function updateTutorialRealtimeInfo(status) {
+		if (!tutorialWizardJointsList) return;
+		
+		tutorialWizardJointsList.innerHTML = "";
+		
+		for (let i = 0; i < 6; i++) {
+			const jointItem = document.createElement("div");
+			jointItem.style.padding = "8px";
+			jointItem.style.background = "var(--bg-secondary)";
+			jointItem.style.borderRadius = "4px";
+			
+			const jointName = status.joint_names?.[i] || `Joint ${i + 1}`;
+			const current = status.realtime_current_positions?.[i] ?? 0;
+			const min = status.realtime_min_positions?.[i];
+			const max = status.realtime_max_positions?.[i];
+			
+			let infoText = `<strong>${jointName}</strong><br>`;
+			infoText += `Current: ${current.toFixed(1)}°<br>`;
+			if (min !== null && min !== undefined) {
+				infoText += `Min: ${min.toFixed(1)}°<br>`;
+			}
+			if (max !== null && max !== undefined) {
+				infoText += `Max: ${max.toFixed(1)}°`;
+			}
+			
+			jointItem.innerHTML = infoText;
+			jointItem.style.fontSize = "12px";
+			jointItem.style.color = "var(--text-primary)";
+			
+			tutorialWizardJointsList.appendChild(jointItem);
+		}
+	}
+	
+	// 튜토리얼 키보드 제어 연결
+	const tutorialStartControlBtn = document.getElementById("tutorial-start-control-btn");
+	const tutorialStopControlBtn = document.getElementById("tutorial-stop-control-btn");
+	const tutorialControlStatusText = document.getElementById("tutorial-control-status-text");
+	const tutorialKeyboardHints = document.getElementById("tutorial-keyboard-hints");
+	
+	let tutorialControlRunning = false;
+	
+	// 튜토리얼 키보드 제어: Start
+	tutorialStartControlBtn?.addEventListener("click", async () => {
+		if (!isConnected) {
+			log("Cannot start control: robot not connected", "error");
+			return;
+		}
+		
+		setButtonLoading(tutorialStartControlBtn, true);
+		try {
+			const res = await fetch("/api/control/start", { method: "POST" });
+			const json = await res.json();
+			if (json.ok) {
+				tutorialControlRunning = true;
+				tutorialStartControlBtn.disabled = true;
+				tutorialStopControlBtn.disabled = false;
+				tutorialControlStatusText.textContent = "Running";
+				tutorialControlStatusText.style.color = "var(--success)";
+				log("Keyboard control started", "success");
+				startControlLoop(); // 기존 제어 루프 사용
+			} else {
+				log(`Failed to start control: ${json.detail || json.message}`, "error");
+			}
+		} catch (error) {
+			log(`Start control error: ${error.message}`, "error");
+		} finally {
+			setButtonLoading(tutorialStartControlBtn, false);
+		}
+	});
+	
+	// 튜토리얼 키보드 제어: Stop
+	tutorialStopControlBtn?.addEventListener("click", async () => {
+		setButtonLoading(tutorialStopControlBtn, true);
+		try {
+			const res = await fetch("/api/control/stop", { method: "POST" });
+			const json = await res.json();
+			if (json.ok) {
+				tutorialControlRunning = false;
+				tutorialStartControlBtn.disabled = false;
+				tutorialStopControlBtn.disabled = true;
+				tutorialControlStatusText.textContent = "Stopped";
+				tutorialControlStatusText.style.color = "var(--text-secondary)";
+				log("Keyboard control stopped", "info");
+				stopControlLoop(); // 기존 제어 루프 사용
+			} else {
+				log(`Failed to stop control: ${json.detail || json.message}`, "error");
+			}
+		} catch (error) {
+			log(`Stop control error: ${error.message}`, "error");
+		} finally {
+			setButtonLoading(tutorialStopControlBtn, false);
+		}
+	});
+	
+	// 튜토리얼 키보드 힌트 업데이트
+	function updateTutorialKeyboardHints() {
+		if (!tutorialKeyboardHints) return;
+		
+		const mode = controlMode || "joint";
+		const hints = getKeyboardHints(mode);
+		tutorialKeyboardHints.innerHTML = "";
+		
+		hints.forEach(({ key, action }) => {
+			const div = document.createElement("div");
+			div.className = "key-hint";
+			div.innerHTML = `
+				<span>${action}</span>
+				<span class="key">${key}</span>
+			`;
+			tutorialKeyboardHints.appendChild(div);
+		});
+	}
+	
+	// 튜토리얼 페이지의 내장 기능들을 기존 기능과 연결
+	// 모터 셋업 기능 연결
+	const tutorialMotorSetupFollowerBtn = document.getElementById("tutorial-motor-setup-follower-btn");
+	const tutorialMotorSetupLeaderBtn = document.getElementById("tutorial-motor-setup-leader-btn");
+	const tutorialMotorSetupFindPortBtn = document.getElementById("tutorial-motor-setup-find-port-btn");
+	const tutorialMotorSetupConfigureBtn = document.getElementById("tutorial-motor-setup-configure-btn");
+	const tutorialMotorSetupCheckIdBtn = document.getElementById("tutorial-motor-setup-check-id-btn");
+	const tutorialMotorSetupResetMotorBtn = document.getElementById("tutorial-motor-setup-reset-motor-btn");
+	const tutorialMotorSetupSkipBtn = document.getElementById("tutorial-motor-setup-skip-btn");
+	const tutorialMotorSetupResetBtn = document.getElementById("tutorial-motor-setup-reset-btn");
+	const tutorialMotorSetupStep1 = document.getElementById("tutorial-motor-setup-step-1");
+	const tutorialMotorSetupStep2 = document.getElementById("tutorial-motor-setup-step-2");
+	const tutorialMotorSetupStep3 = document.getElementById("tutorial-motor-setup-step-3");
+	const tutorialMotorSetupMotorsList = document.getElementById("tutorial-motor-setup-motors-list");
+	const tutorialMotorSetupCurrentMotor = document.getElementById("tutorial-motor-setup-current-motor");
+	const tutorialMotorSetupCurrentMotorName = document.getElementById("tutorial-motor-setup-current-motor-name");
+	const tutorialMotorSetupPortResult = document.getElementById("tutorial-motor-setup-port-result");
+	const tutorialMotorSetupPortValue = document.getElementById("tutorial-motor-setup-port-value");
+	const tutorialMotorSetupProgress = document.getElementById("tutorial-motor-setup-progress");
+	const tutorialMotorSetupProgressText = document.getElementById("tutorial-motor-setup-progress-text");
+	const tutorialMotorSetupProgressBar = document.getElementById("tutorial-motor-setup-progress-bar");
+	// tutorialMotorSetupStatus는 위에서 이미 선언됨 (중복 선언 방지 - 사용만 함)
+	const tutorialMotorSetupIdResult = document.getElementById("tutorial-motor-setup-id-result");
+	const tutorialMotorSetupIdResultText = document.getElementById("tutorial-motor-setup-id-result-text");
+	const tutorialMotorSetupComplete = document.getElementById("tutorial-motor-setup-complete");
+	
+	// 튜토리얼 모터 셋업용 상태 (별도 관리)
+	let tutorialMotorSetupState = {
+		robotType: null,
+		motors: [],
+		port: null,
+		currentMotorIndex: 0,
+		configuredMotors: new Set()
+	};
+	
+	// 튜토리얼 모터 셋업: Start
+	if (tutorialMotorSetupFollowerBtn) {
+		tutorialMotorSetupFollowerBtn.addEventListener("click", async () => {
+			await startTutorialMotorSetup("follower");
+		});
+	}
+	
+	if (tutorialMotorSetupLeaderBtn) {
+		tutorialMotorSetupLeaderBtn.addEventListener("click", async () => {
+			await startTutorialMotorSetup("leader");
+		});
+	}
+	
+	async function startTutorialMotorSetup(robotType) {
+		try {
+			const response = await fetch("/api/setup/start", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ robot_type: robotType })
+			});
+			const data = await response.json();
+			
+			if (data.ok) {
+				tutorialMotorSetupState.robotType = robotType;
+				tutorialMotorSetupState.motors = data.motors || [];
+				tutorialMotorSetupState.configuredMotors.clear();
+				tutorialMotorSetupState.currentMotorIndex = 0;
+				
+				// Show step 2
+				tutorialMotorSetupStep1.style.display = "none";
+				tutorialMotorSetupStep2.style.display = "block";
+				
+				showTutorialMotorSetupStatus("success", `Motor setup started for ${robotType} arm`);
+			} else {
+				showTutorialMotorSetupStatus("error", data.error || "Failed to start motor setup");
+			}
+		} catch (error) {
+			showTutorialMotorSetupStatus("error", `Error: ${error.message}`);
+		}
+	}
+	
+	// 튜토리얼 모터 셋업: Find Port
+	if (tutorialMotorSetupFindPortBtn) {
+		tutorialMotorSetupFindPortBtn.addEventListener("click", async () => {
+			try {
+				tutorialMotorSetupFindPortBtn.disabled = true;
+				tutorialMotorSetupFindPortBtn.textContent = "Finding...";
+				
+				const portsBeforeRes = await fetch("/api/setup/ports-before");
+				const portsBeforeData = await portsBeforeRes.json();
+				
+				if (!portsBeforeData.ok) {
+					throw new Error("Failed to get ports");
+				}
+				
+				const findPortRes = await fetch("/api/setup/find-port", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ ports_before: portsBeforeData.ports })
+				});
+				
+				const findPortData = await findPortRes.json();
+				
+				if (findPortData.ok) {
+					tutorialMotorSetupState.port = findPortData.port;
+					tutorialMotorSetupPortValue.textContent = findPortData.port;
+					tutorialMotorSetupPortResult.style.display = "block";
+					
+					const methodText = document.getElementById("tutorial-motor-setup-port-method");
+					if (methodText) {
+						if (findPortData.method === "pid") {
+							methodText.textContent = "✓ Found automatically (no USB disconnection needed)";
+							methodText.style.color = "var(--success)";
+						} else {
+							methodText.textContent = "Please reconnect the USB cable now.";
+							methodText.style.color = "var(--text-secondary)";
+						}
+					}
+					
+					tutorialMotorSetupStep2.style.display = "none";
+					tutorialMotorSetupStep3.style.display = "block";
+					tutorialMotorSetupProgress.style.display = "block";
+					
+					renderTutorialMotorsList();
+					updateTutorialCurrentMotor();
+					
+					showTutorialMotorSetupStatus("success", `Port found: ${findPortData.port}`);
+				} else {
+					throw new Error(findPortData.detail || "Failed to find port");
+				}
+			} catch (error) {
+				showTutorialMotorSetupStatus("error", `Error: ${error.message}`);
+			} finally {
+				tutorialMotorSetupFindPortBtn.disabled = false;
+				tutorialMotorSetupFindPortBtn.textContent = "Find Port";
+			}
+		});
+	}
+	
+	function renderTutorialMotorsList() {
+		if (!tutorialMotorSetupMotorsList) return;
+		
+		tutorialMotorSetupMotorsList.innerHTML = "";
+		
+		tutorialMotorSetupState.motors.forEach((motor, index) => {
+			const motorItem = document.createElement("div");
+			motorItem.className = "motor-item";
+			motorItem.style.cursor = "pointer";
+			motorItem.title = `Click to configure ${motor.name} (ID: ${motor.id})`;
+			
+			if (tutorialMotorSetupState.configuredMotors.has(motor.id)) {
+				motorItem.classList.add("configured");
+			}
+			if (index === tutorialMotorSetupState.currentMotorIndex) {
+				motorItem.classList.add("current");
+			}
+			
+			motorItem.innerHTML = `
+				<div>
+					<span class="motor-item-name">${motor.name}</span>
+					<span class="motor-item-id"> (ID: ${motor.id})</span>
+				</div>
+				<span class="motor-item-status ${tutorialMotorSetupState.configuredMotors.has(motor.id) ? 'configured' : 'pending'}">
+					${tutorialMotorSetupState.configuredMotors.has(motor.id) ? '✓ Configured' : 'Pending'}
+				</span>
+			`;
+			
+			motorItem.addEventListener("click", () => {
+				tutorialMotorSetupState.currentMotorIndex = index;
+				updateTutorialCurrentMotor();
+			});
+			
+			tutorialMotorSetupMotorsList.appendChild(motorItem);
+		});
+	}
+	
+	function updateTutorialCurrentMotor() {
+		if (tutorialMotorSetupState.motors.length === 0) return;
+		
+		const progress = (tutorialMotorSetupState.configuredMotors.size / tutorialMotorSetupState.motors.length) * 100;
+		tutorialMotorSetupProgressBar.style.width = `${progress}%`;
+		tutorialMotorSetupProgressText.textContent = `${tutorialMotorSetupState.configuredMotors.size} / ${tutorialMotorSetupState.motors.length}`;
+		
+		const currentMotor = tutorialMotorSetupState.motors[tutorialMotorSetupState.currentMotorIndex];
+		if (!currentMotor) {
+			tutorialMotorSetupCurrentMotor.style.display = "none";
+			renderTutorialMotorsList();
+			// 모든 모터 설정 완료 체크
+			if (tutorialMotorSetupState.configuredMotors.size === tutorialMotorSetupState.motors.length) {
+				if (tutorialMotorSetupComplete) {
+					tutorialMotorSetupComplete.style.display = "block";
+				}
+				// 2초 후 자동으로 다음 단계로
+				setTimeout(() => {
+					if (currentTutorialPage === 2) {
+						currentTutorialPage = 3;
+						updateTutorialPage();
+					}
+				}, 2000);
+			}
+			return;
+		}
+		
+		tutorialMotorSetupCurrentMotorName.textContent = `${currentMotor.name} (ID: ${currentMotor.id})`;
+		tutorialMotorSetupCurrentMotor.style.display = "block";
+		
+		renderTutorialMotorsList();
+	}
+	
+	function showTutorialMotorSetupStatus(type, message) {
+		if (!tutorialMotorSetupStatus) return;
+		tutorialMotorSetupStatus.style.display = "block";
+		tutorialMotorSetupStatus.style.background = type === "success" ? "rgba(16, 185, 129, 0.1)" : "rgba(239, 68, 68, 0.1)";
+		tutorialMotorSetupStatus.style.borderLeft = `3px solid ${type === "success" ? "var(--success)" : "var(--error)"}`;
+		tutorialMotorSetupStatus.style.color = type === "success" ? "var(--success)" : "var(--error)";
+		tutorialMotorSetupStatus.textContent = message;
+		log(message, type);
+	}
+	
+	// 튜토리얼 모터 셋업: Configure Motor
+	if (tutorialMotorSetupConfigureBtn) {
+		tutorialMotorSetupConfigureBtn.addEventListener("click", async () => {
+			if (!tutorialMotorSetupState.port || tutorialMotorSetupState.motors.length === 0) {
+				showTutorialMotorSetupStatus("error", "Port or motors not set");
+				return;
+			}
+			
+			const currentMotor = tutorialMotorSetupState.motors[tutorialMotorSetupState.currentMotorIndex];
+			if (!currentMotor) {
+				showTutorialMotorSetupStatus("error", "No motor selected");
+				return;
+			}
+			
+			setButtonLoading(tutorialMotorSetupConfigureBtn, true);
+			try {
+				const response = await fetch("/api/setup/configure", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						port: tutorialMotorSetupState.port,
+						motor_id: currentMotor.id,
+						baudrate: 115200
+					})
+				});
+				
+				const data = await response.json();
+				
+				if (data.ok) {
+					tutorialMotorSetupState.configuredMotors.add(currentMotor.id);
+					showTutorialMotorSetupStatus("success", `${currentMotor.name} configured successfully`);
+					
+					// 다음 모터로 이동
+					if (tutorialMotorSetupState.currentMotorIndex < tutorialMotorSetupState.motors.length - 1) {
+						tutorialMotorSetupState.currentMotorIndex++;
+					}
+					updateTutorialCurrentMotor();
+				} else {
+					showTutorialMotorSetupStatus("error", data.detail || "Failed to configure motor");
+				}
+			} catch (error) {
+				showTutorialMotorSetupStatus("error", `Error: ${error.message}`);
+			} finally {
+				setButtonLoading(tutorialMotorSetupConfigureBtn, false);
+			}
+		});
+	}
+	
+	// 튜토리얼 모터 셋업: Check ID
+	if (tutorialMotorSetupCheckIdBtn) {
+		tutorialMotorSetupCheckIdBtn.addEventListener("click", async () => {
+			if (!tutorialMotorSetupState.port) {
+				showTutorialMotorSetupStatus("error", "Port not set");
+				return;
+			}
+			
+			setButtonLoading(tutorialMotorSetupCheckIdBtn, true);
+			try {
+				const response = await fetch("/api/setup/check-id", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ port: tutorialMotorSetupState.port })
+				});
+				
+				const data = await response.json();
+				
+				if (data.ok) {
+					tutorialMotorSetupIdResult.style.display = "block";
+					tutorialMotorSetupIdResultText.textContent = `Motor ID: ${data.motor_id}, Baudrate: ${data.baudrate}`;
+					tutorialMotorSetupIdResultText.style.color = "var(--success)";
+					showTutorialMotorSetupStatus("success", `Motor ID: ${data.motor_id}, Baudrate: ${data.baudrate}`);
+				} else {
+					tutorialMotorSetupIdResult.style.display = "block";
+					tutorialMotorSetupIdResultText.textContent = data.detail || "Failed to check motor ID";
+					tutorialMotorSetupIdResultText.style.color = "var(--error)";
+					showTutorialMotorSetupStatus("error", data.detail || "Failed to check motor ID");
+				}
+			} catch (error) {
+				showTutorialMotorSetupStatus("error", `Error: ${error.message}`);
+			} finally {
+				setButtonLoading(tutorialMotorSetupCheckIdBtn, false);
+			}
+		});
+	}
+	
+	// 튜토리얼 모터 셋업: Reset Motor
+	if (tutorialMotorSetupResetMotorBtn) {
+		tutorialMotorSetupResetMotorBtn.addEventListener("click", async () => {
+			if (!tutorialMotorSetupState.port) {
+				showTutorialMotorSetupStatus("error", "Port not set");
+				return;
+			}
+			
+			if (!confirm("Are you sure you want to reset the motor ID to 1? This will allow you to reconfigure it.")) {
+				return;
+			}
+			
+			setButtonLoading(tutorialMotorSetupResetMotorBtn, true);
+			try {
+				const response = await fetch("/api/setup/reset-motor", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ port: tutorialMotorSetupState.port })
+				});
+				
+				const data = await response.json();
+				
+				if (data.ok) {
+					showTutorialMotorSetupStatus("success", "Motor ID reset to 1. You can now configure it.");
+				} else {
+					showTutorialMotorSetupStatus("error", data.detail || "Failed to reset motor");
+				}
+			} catch (error) {
+				showTutorialMotorSetupStatus("error", `Error: ${error.message}`);
+			} finally {
+				setButtonLoading(tutorialMotorSetupResetMotorBtn, false);
+			}
+		});
+	}
+	
+	// 튜토리얼 모터 셋업: Skip
+	if (tutorialMotorSetupSkipBtn) {
+		tutorialMotorSetupSkipBtn.addEventListener("click", () => {
+			if (tutorialMotorSetupState.currentMotorIndex < tutorialMotorSetupState.motors.length - 1) {
+				tutorialMotorSetupState.currentMotorIndex++;
+				updateTutorialCurrentMotor();
+			}
+		});
+	}
+	
+	// 튜토리얼 모터 셋업: Reset
+	if (tutorialMotorSetupResetBtn) {
+		tutorialMotorSetupResetBtn.addEventListener("click", async () => {
+			try {
+				const response = await fetch("/api/setup/reset", { method: "POST" });
+				const data = await response.json();
+				
+				if (data.ok) {
+					tutorialMotorSetupState = {
+						robotType: null,
+						motors: [],
+						port: null,
+						currentMotorIndex: 0,
+						configuredMotors: new Set()
+					};
+					
+					tutorialMotorSetupStep1.style.display = "block";
+					tutorialMotorSetupStep2.style.display = "none";
+					tutorialMotorSetupStep3.style.display = "none";
+					tutorialMotorSetupProgress.style.display = "none";
+					tutorialMotorSetupPortResult.style.display = "none";
+					tutorialMotorSetupCurrentMotor.style.display = "none";
+					tutorialMotorSetupStatus.style.display = "none";
+					tutorialMotorSetupIdResult.style.display = "none";
+					tutorialMotorSetupComplete.style.display = "none";
+					
+					showTutorialMotorSetupStatus("success", "Motor setup reset");
+				} else {
+					showTutorialMotorSetupStatus("error", data.detail || "Failed to reset");
+				}
+			} catch (error) {
+				showTutorialMotorSetupStatus("error", `Error: ${error.message}`);
+			}
+		});
 	}
 
-	tutorialPagePrev?.addEventListener("click", () => {
-		if (currentTutorialPage > 1) {
-			currentTutorialPage--;
-			updateTutorialPage();
-		}
-	});
-
-	tutorialPageNext?.addEventListener("click", () => {
-		if (currentTutorialPage < totalTutorialPages) {
-			currentTutorialPage++;
-			updateTutorialPage();
-		} else {
-			// 완료 시 연결 섹션으로 이동
-			const connectionMenuItem = document.querySelector('[data-section="connection"]');
-			if (connectionMenuItem) {
-				connectionMenuItem.click();
+	if (tutorialPagePrev) {
+		tutorialPagePrev.addEventListener("click", (e) => {
+			console.log("[Tutorial] Prev button clicked, current page:", currentTutorialPage);
+			e.preventDefault();
+			e.stopPropagation();
+			if (currentTutorialPage > 1) {
+				currentTutorialPage--;
+				updateTutorialPage();
 			}
-			localStorage.setItem("rosota_tutorial_seen", "true");
-			log("튜토리얼을 완료했습니다. 이제 로봇을 시작할 수 있습니다!", "success");
-		}
-	});
+		});
+		console.log("[Tutorial] Prev button event listener registered");
+	} else {
+		console.warn("[Tutorial] tutorialPagePrev button not found (this is normal on first page)");
+	}
+
+	if (tutorialPageNext) {
+		tutorialPageNext.addEventListener("click", (e) => {
+			console.log("[Tutorial] Next button clicked, current page:", currentTutorialPage);
+			e.preventDefault();
+			e.stopPropagation();
+			if (currentTutorialPage < totalTutorialPages) {
+				currentTutorialPage++;
+				updateTutorialPage();
+			} else {
+				// 완료 시 제어 섹션으로 이동
+				const controlItem = document.querySelector('[data-section="control"]');
+				if (controlItem) {
+					controlItem.click();
+				}
+				log("튜토리얼을 완료했습니다! 이제 로봇을 제어할 수 있습니다.", "success");
+			}
+		});
+		console.log("[Tutorial] Next button event listener registered");
+	} else {
+		console.error("[Tutorial] tutorialPageNext button not found!");
+	}
 
 	// 인디케이터 클릭으로 페이지 이동
 	tutorialDots.forEach((dot, index) => {
@@ -1742,21 +2648,8 @@
 
 	// 초기 페이지 설정
 	updateTutorialPage();
-
-	// 첫 실행 시 튜토리얼 섹션으로 이동
-	function checkFirstTime() {
-		const hasSeenTutorial = localStorage.getItem("rosota_tutorial_seen");
-		if (!hasSeenTutorial) {
-			setTimeout(() => {
-				const tutorialMenuItem = document.querySelector('[data-section="tutorial"]');
-				if (tutorialMenuItem) {
-					tutorialMenuItem.click();
-				}
-			}, 1000);
-		}
-	}
 	
-	checkFirstTime();
+	// 튜토리얼 페이지가 기본으로 표시되므로 checkFirstTime은 필요 없음
 
 	// 키보드 단축키 가이드 모달
 	const shortcutsModal = document.getElementById("shortcuts-modal");
