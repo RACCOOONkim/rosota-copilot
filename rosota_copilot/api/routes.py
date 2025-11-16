@@ -39,7 +39,14 @@ async def connect_robot(req: ConnectRequest, request: Request):
 					"ports": scan_serial_ports(),
 				}
 
-		success = robot_adapter.connect(port=port, host=host, baudrate=baud)
+		# SOArm100AdapterV2는 port만 받음
+		if port:
+			success = robot_adapter.connect(port=port)
+		elif host:
+			# TCP/IP 연결은 아직 지원하지 않음
+			raise HTTPException(status_code=400, detail="TCP/IP connection not supported with SOArm100AdapterV2")
+		else:
+			raise HTTPException(status_code=400, detail="Port or host required")
 		if success:
 			# 캘리브레이션 매니저에 로봇 어댑터 연결
 			calibration_manager = request.app.state.calibration_manager

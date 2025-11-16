@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from .api.routes import api_router
-from .robot.so_arm import SOArm100Adapter
+from .robot.so_arm_v2 import SOArm100AdapterV2
 from .robot.keyboard_control import KeyboardController
 from .robot.calibration import CalibrationManager
 from .robot.motor_setup import MotorSetupManager
@@ -16,7 +16,7 @@ from .config import DEFAULT_CONFIG
 load_dotenv()
 
 # Global robot instances
-robot_adapter = SOArm100Adapter()
+robot_adapter = SOArm100AdapterV2()
 
 # Socket.IO는 나중에 정의되므로, 전역 변수로 접근
 sio = None
@@ -191,6 +191,40 @@ def bind_socketio_events():
 			print(f"[Server] Control key error: {e}")
 			await sio.emit("robot:error", {"message": str(e)}, to=sid)
 
+	@sio.on("control:slider")
+	async def handle_control_slider(sid, data):
+		"""슬라이더 제어 처리"""
+		try:
+			joint_index = data.get("joint_index")
+			target_position = data.get("target_position")
+			
+			if joint_index is None or target_position is None:
+				await sio.emit("robot:error", {
+					"message": "Missing joint_index or target_position"
+				}, to=sid)
+				return
+			
+			if not robot_adapter.connected:
+				await sio.emit("robot:error", {
+					"message": "Robot not connected"
+				}, to=sid)
+				return
+			
+			# 조인트를 절대 위치로 이동
+			success = robot_adapter.move_joint_absolute(joint_index, target_position)
+			
+			if success:
+				print(f"[Server] Slider control: Joint {joint_index} moved to {target_position}°")
+			else:
+				await sio.emit("robot:error", {
+					"message": f"Failed to move joint {joint_index} to {target_position}°"
+				}, to=sid)
+		except Exception as e:
+			import traceback
+			traceback.print_exc()
+			print(f"[Server] Control slider error: {e}")
+			await sio.emit("robot:error", {"message": str(e)}, to=sid)
+
 
 bind_socketio_events()
 
@@ -232,7 +266,7 @@ async def auto_connect_robot():
 	if port:
 		print(f"Auto-detected robot port: {port}")
 		try:
-			success = robot_adapter.connect(port=port, baudrate=115200)
+			success = robot_adapter.connect(port=port)
 			if success:
 				print(f"Auto-connected to robot on {port}")
 				# 캘리브레이션 매니저에 로봇 어댑터 연결

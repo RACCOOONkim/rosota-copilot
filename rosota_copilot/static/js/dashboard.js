@@ -116,9 +116,13 @@
 			"card.calibration_wizard": "📋 캘리브레이션 마법사",
 			"card.quick_actions": "빠른 작업",
 			"card.control_mode": "제어 모드",
-			"card.keyboard_control": "키보드 제어",
-			"card.joint_positions": "조인트 위치",
-			"card.system_logs": "📋 시스템 로그",
+		"card.keyboard_control": "키보드 제어",
+		"card.slider_control": "슬라이더 제어",
+		"tip.slider_control": "슬라이더를 조절하여 각 조인트를 직접 제어하세요.",
+		"tab.keyboard_control": "키보드 제어",
+		"tab.slider_control": "슬라이더 제어",
+		"card.joint_positions": "조인트 위치",
+		"card.system_logs": "📋 시스템 로그",
 			"option.serial_usb": "Serial (USB)",
 			"option.tcp_ip": "TCP/IP",
 			"option.auto_detect": "자동 감지",
@@ -229,9 +233,13 @@
 			"card.calibration_wizard": "📋 Calibration Wizard",
 			"card.quick_actions": "Quick Actions",
 			"card.control_mode": "Control Mode",
-			"card.keyboard_control": "Keyboard Control",
-			"card.joint_positions": "Joint Positions",
-			"card.system_logs": "📋 System Logs",
+		"card.keyboard_control": "Keyboard Control",
+		"card.slider_control": "Slider Control",
+		"tip.slider_control": "Control each joint directly by adjusting the sliders.",
+		"tab.keyboard_control": "Keyboard Control",
+		"tab.slider_control": "Slider Control",
+		"card.joint_positions": "Joint Positions",
+		"card.system_logs": "📋 System Logs",
 			"option.serial_usb": "Serial (USB)",
 			"option.tcp_ip": "TCP/IP",
 			"option.auto_detect": "Auto-detect",
@@ -370,6 +378,38 @@
 		log(`Auto-scroll ${autoScrollEnabled ? "enabled" : "disabled"}`, "info");
 	});
 
+	// 제어 방식 탭 전환
+	const tabKeyboard = document.getElementById("tab-keyboard");
+	const tabSlider = document.getElementById("tab-slider");
+	const panelKeyboard = document.getElementById("panel-keyboard");
+	const panelSlider = document.getElementById("panel-slider");
+
+	function switchControlTab(tab) {
+		// 탭 활성화 상태 업데이트
+		if (tab === "keyboard") {
+			tabKeyboard?.classList.add("active");
+			tabSlider?.classList.remove("active");
+			panelKeyboard?.style.setProperty("display", "block");
+			panelSlider?.style.setProperty("display", "none");
+		} else if (tab === "slider") {
+			tabKeyboard?.classList.remove("active");
+			tabSlider?.classList.add("active");
+			panelKeyboard?.style.setProperty("display", "none");
+			panelSlider?.style.setProperty("display", "block");
+			
+			// 슬라이더가 아직 초기화되지 않았으면 기본값으로 초기화
+			const slidersContainer = document.getElementById("joint-sliders");
+			if (slidersContainer && sliderElements.length === 0) {
+				// 기본값으로 초기화 (캘리브레이션 데이터가 없을 때)
+				const defaultLimits = Array(6).fill(null).map(() => ({ min: -180, max: 180 }));
+				initializeSliders(currentJointLimits || defaultLimits);
+			}
+		}
+	}
+
+	tabKeyboard?.addEventListener("click", () => switchControlTab("keyboard"));
+	tabSlider?.addEventListener("click", () => switchControlTab("slider"));
+
 	// Update status
 	function updateStatus(status, connected = false, connectionInfo = null) {
 		isConnected = connected;
@@ -466,7 +506,116 @@
 			jointDisplay.appendChild(jointItem);
 		}
 	}
-	
+
+	// 슬라이더 초기화 및 관리
+	let sliderElements = [];
+	let isDraggingSlider = false;
+	let currentJointLimits = null;
+
+	function initializeSliders(jointLimits) {
+		const slidersContainer = document.getElementById("joint-sliders");
+		if (!slidersContainer) return;
+
+		// 조인트 이름과 ID 매핑
+		const jointNames = ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll", "gripper"];
+		const jointIds = [1, 2, 3, 4, 5, 6];
+
+		// 기존 슬라이더 제거
+		slidersContainer.innerHTML = "";
+		sliderElements = [];
+
+		// 각 조인트에 대한 슬라이더 생성
+		for (let i = 0; i < 6; i++) {
+			const jointName = jointNames[i] || `Joint ${i + 1}`;
+			const jointId = jointIds[i] || i + 1;
+			
+			// 범위 설정 (캘리브레이션 데이터가 있으면 사용, 없으면 기본값)
+			const min = jointLimits?.[i]?.min ?? -180;
+			const max = jointLimits?.[i]?.max ?? 180;
+			const current = 0; // 초기값
+
+			const sliderItem = document.createElement("div");
+			sliderItem.className = "slider-item";
+			sliderItem.innerHTML = `
+				<div class="slider-header">
+					<span class="slider-name">${jointName} <span style="font-size: 11px; color: var(--text-secondary);">(ID: ${jointId})</span></span>
+					<span class="slider-value" id="slider-value-${i}">${current.toFixed(1)}°</span>
+				</div>
+				<div class="slider-container">
+					<span class="slider-label">${min.toFixed(1)}°</span>
+					<input type="range" 
+						class="slider" 
+						id="slider-${i}" 
+						min="${min}" 
+						max="${max}" 
+						step="0.1" 
+						value="${current}"
+						data-joint-index="${i}">
+					<span class="slider-label">${max.toFixed(1)}°</span>
+				</div>
+			`;
+
+			slidersContainer.appendChild(sliderItem);
+
+			const slider = document.getElementById(`slider-${i}`);
+			const valueDisplay = document.getElementById(`slider-value-${i}`);
+
+			// 슬라이더 이벤트 리스너
+			slider.addEventListener("input", (e) => {
+				const value = parseFloat(e.target.value);
+				valueDisplay.textContent = `${value.toFixed(1)}°`;
+				isDraggingSlider = true;
+			});
+
+			slider.addEventListener("change", (e) => {
+				const jointIndex = parseInt(e.target.dataset.jointIndex);
+				const targetPosition = parseFloat(e.target.value);
+				
+				// 서버로 슬라이더 제어 명령 전송
+				socket.emit("control:slider", {
+					joint_index: jointIndex,
+					target_position: targetPosition
+				});
+
+				// 드래그 종료 후 잠시 대기 후 플래그 해제
+				setTimeout(() => {
+					isDraggingSlider = false;
+				}, 100);
+			});
+
+			slider.addEventListener("mousedown", () => {
+				isDraggingSlider = true;
+			});
+
+			slider.addEventListener("mouseup", () => {
+				setTimeout(() => {
+					isDraggingSlider = false;
+				}, 100);
+			});
+
+			sliderElements.push({
+				slider,
+				valueDisplay,
+				jointIndex: i,
+				min,
+				max
+			});
+		}
+
+		currentJointLimits = jointLimits;
+	}
+
+	function updateSliders(joints) {
+		if (!joints || !Array.isArray(joints) || isDraggingSlider) return;
+		
+		sliderElements.forEach(({ slider, valueDisplay, jointIndex }) => {
+			if (joints[jointIndex] !== undefined) {
+				const value = joints[jointIndex];
+				slider.value = value;
+				valueDisplay.textContent = `${value.toFixed(1)}°`;
+			}
+		});
+	}
 
 	// Load available ports
 	async function loadPorts() {
@@ -1034,6 +1183,44 @@
 	socket.on("state:update", (data) => {
 		if (data.joint_positions) {
 			updateJointDisplay(data.joint_positions);
+			updateSliders(data.joint_positions);
+		}
+		// 조인트 제한 범위 처리
+		let limitsArray = null;
+		if (data.joint_limits) {
+			// 서버에서 [min, max] 형태로 오는 것을 {min, max} 형태로 변환
+			limitsArray = data.joint_limits.map((limit, index) => {
+				let min, max;
+				if (Array.isArray(limit)) {
+					min = limit[0];
+					max = limit[1];
+				} else {
+					min = limit.min;
+					max = limit.max;
+				}
+				
+				// min과 max 순서 확인 및 정렬
+				if (min > max) {
+					console.warn(`[Slider] Joint ${index} limits reversed: min=${min}, max=${max}. Swapping...`);
+					[min, max] = [max, min];
+				}
+				
+				return { min, max };
+			});
+			
+			console.log("[Slider] Received joint_limits:", limitsArray);
+		} else if (sliderElements.length === 0) {
+			// joint_limits가 없고 슬라이더가 초기화되지 않았으면 기본값 사용
+			limitsArray = Array(6).fill(null).map(() => ({ min: -180, max: 180 }));
+			console.log("[Slider] Using default limits:", limitsArray);
+		}
+		
+		// 슬라이더 초기화 또는 업데이트
+		if (limitsArray) {
+			if (JSON.stringify(limitsArray) !== JSON.stringify(currentJointLimits)) {
+				console.log("[Slider] Initializing sliders with limits:", limitsArray);
+				initializeSliders(limitsArray);
+			}
 		}
 		if (data.status) {
 			const connectionInfo = data.connection ? {

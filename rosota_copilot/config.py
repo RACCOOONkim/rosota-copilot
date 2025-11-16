@@ -6,6 +6,7 @@ from typing import Dict, Any
 PROJECT_ROOT = Path(__file__).parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
 CALIBRATION_DIR = DATA_DIR / "calibration"
+RECORD_DIR = DATA_DIR / "records"
 
 # 기본 설정
 DEFAULT_CONFIG: Dict[str, Any] = {
@@ -47,4 +48,5 @@ DEFAULT_CONFIG: Dict[str, Any] = {
 # 디렉토리 생성
 DATA_DIR.mkdir(exist_ok=True)
 CALIBRATION_DIR.mkdir(exist_ok=True)
+RECORD_DIR.mkdir(exist_ok=True)
 

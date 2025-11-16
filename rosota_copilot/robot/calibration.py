@@ -212,9 +212,8 @@ class CalibrationManager:
 		참고: https://huggingface.co/docs/lerobot/so101
 		
 		LeRobot 방식:
-		1. 모든 조인트를 중간 위치로 이동
-		2. 각 조인트를 전체 범위로 움직이면서 최소/최대값 측정
-		3. 캘리브레이션 데이터 저장
+		1. 조인트 범위 측정 (Step 1 중간 위치는 건너뜀)
+		2. 캘리브레이션 데이터 저장
 		
 		Returns: (status, message) where status is "success", "in_progress", or "error"
 		"""
@@ -249,35 +248,45 @@ class CalibrationManager:
 			
 			# Step 1을 건너뛰고 바로 Step 2 (조인트 범위 측정)로
 			self.calibration_current_step = 2
+			
+			joint_name = self.robot.JOINT_NAMES[0] if hasattr(self.robot, 'JOINT_NAMES') else "Joint 1"
+			return (
+				"in_progress",
+				f"Step 1/{self.calibration_max_steps}: 조인트 범위 측정\n\n"
+				f"📋 현재 측정 중: {joint_name} (조인트 1/6)\n\n"
+				"📋 작업 내용:\n"
+				f"• {joint_name}를 최소 위치로 이동하세요\n"
+				"• 최소 위치에 도달하면 'Record Min' 버튼을 클릭하세요\n"
+				"• 그 다음 최대 위치로 이동하고 'Record Max' 버튼을 클릭하세요\n\n"
+				"💡 팁:\n"
+				"• 각 조인트를 천천히 움직이며 전체 범위를 확인하세요\n"
+				"• 최소/최대 위치를 정확히 기록하는 것이 중요합니다"
+			)
 		
 		# Step 2: 각 조인트의 최소/최대값 측정
 		if self.calibration_current_step == 2:
-			# 이 단계는 프론트엔드에서 "Record Min" / "Record Max" 버튼으로 처리
-			# 여기서는 다음 조인트로 넘어가는 로직만 처리
-			# 실제 측정은 별도 API 엔드포인트에서 처리
+			# 모든 조인트 측정 완료 확인
+			if self.current_joint_index >= 6:
+				self.calibration_current_step = 3
+				return (
+					"in_progress",
+					f"Step 2/{self.calibration_max_steps}: 캘리브레이션 데이터 저장\n\n"
+					"📋 작업 내용:\n"
+					"• 모든 조인트의 범위가 측정되었습니다\n"
+					"• 측정된 범위:\n"
+					+ "\n".join([
+						f"  - {self.robot.JOINT_NAMES[i] if hasattr(self.robot, 'JOINT_NAMES') else f'Joint {i+1}'}: "
+						f"{self.joint_min_positions[i]:.1f}° ~ {self.joint_max_positions[i]:.1f}°"
+						for i in range(6) if self.joint_min_positions[i] is not None and self.joint_max_positions[i] is not None
+					]) + "\n\n"
+					"✅ 'Next Step' 버튼을 클릭하면 캘리브레이션 데이터를 저장하고 완료합니다."
+				)
 			
-		# 모든 조인트 측정 완료 확인
-		if self.current_joint_index >= 6:
-			self.calibration_current_step = 3  # 내부적으로 3으로 유지 (조건문 호환)
+			# 다음 조인트로 넘어가기
+			joint_name = self.robot.JOINT_NAMES[self.current_joint_index] if hasattr(self.robot, 'JOINT_NAMES') else f"Joint {self.current_joint_index + 1}"
 			return (
 				"in_progress",
-				f"Step 2/{self.calibration_max_steps}: 캘리브레이션 데이터 저장\n\n"
-				"📋 작업 내용:\n"
-				"• 모든 조인트의 범위가 측정되었습니다\n"
-				"• 측정된 범위:\n"
-				+ "\n".join([
-					f"  - {self.robot.JOINT_NAMES[i] if hasattr(self.robot, 'JOINT_NAMES') else f'Joint {i+1}'}: "
-					f"{self.joint_min_positions[i]:.1f}° ~ {self.joint_max_positions[i]:.1f}°"
-					for i in range(6) if self.joint_min_positions[i] is not None and self.joint_max_positions[i] is not None
-				]) + "\n\n"
-				"✅ 'Next Step' 버튼을 클릭하면 캘리브레이션 데이터를 저장하고 완료합니다."
-			)
-			
-		# 다음 조인트로 넘어가기 (프론트엔드에서 호출)
-		joint_name = self.robot.JOINT_NAMES[self.current_joint_index] if hasattr(self.robot, 'JOINT_NAMES') else f"Joint {self.current_joint_index + 1}"
-		return (
-			"in_progress",
-			f"Step 1/{self.calibration_max_steps}: 조인트 범위 측정\n\n"
+				f"Step 1/{self.calibration_max_steps}: 조인트 범위 측정\n\n"
 				f"📋 현재 측정 중: {joint_name} (조인트 {self.current_joint_index + 1}/6)\n\n"
 				"📋 작업 내용:\n"
 				f"• {joint_name}를 최소 위치로 이동하세요\n"
@@ -288,10 +297,9 @@ class CalibrationManager:
 				"• 최소/최대 위치를 정확히 기록하는 것이 중요합니다"
 			)
 		
-		# Step 2: 완료 및 저장 (이전 Step 3)
+		# Step 3: 완료 및 저장
 		if self.calibration_current_step == 3:
 			# 측정된 범위를 기반으로 오프셋 계산
-			# 중간 위치를 0으로 만드는 오프셋 계산
 			import math
 			
 			# 각 조인트의 중간값 계산
@@ -306,82 +314,81 @@ class CalibrationManager:
 					joint_middles.append(0.0)
 					self.data["joint_offsets"][i] = 0.0
 			
-		# 측정된 범위를 데이터에 저장
-		self.data["joint_ranges"] = {
-			"min": [self.joint_min_positions[i] if self.joint_min_positions[i] is not None else -180 for i in range(6)],
-			"max": [self.joint_max_positions[i] if self.joint_max_positions[i] is not None else 180 for i in range(6)],
-			"middle": joint_middles
-		}
-		
-		# homing_offset은 사용하지 않음 (Feetech 모터는 -180° ~ +180° 지원)
-		
-		# SO-100 어댑터의 캘리브레이션 오프셋 업데이트
-		if hasattr(self.robot, 'calibration_offsets'):
-			self.robot.calibration_offsets = self.data["joint_offsets"]
-			self._log("Calibration offsets applied to robot adapter", "success")
-		
-		# 조인트 제한값 업데이트 (측정된 범위를 제한값으로 사용)
-		if hasattr(self.robot, 'joint_limits'):
-			new_limits = []
-			for i in range(6):
-				min_val = self.joint_min_positions[i] if self.joint_min_positions[i] is not None else -180
-				max_val = self.joint_max_positions[i] if self.joint_max_positions[i] is not None else 180
-				new_limits.append([min_val, max_val])
-			self.robot.joint_limits = new_limits
-			self._log(f"Joint limits updated from calibration: {new_limits}", "success")
-		
-		# FeetechMotorsBus 기본 캘리브레이션 사용 (homing_offset = 0)
-		# Feetech STS3215는 이미 -180° ~ +180° 범위를 지원하므로
-		# homing_offset 없이 소프트웨어 제한만으로 충분함
-		if hasattr(self.robot, 'motors_bus') and self.robot.motors_bus:
-			try:
-				from .motors.feetech import CalibrationMode
-				
-				self._log("Using default calibration (no homing_offset)", "info")
-				
-				# 기본 캘리브레이션 데이터 설정
-				calibration_data = {
-					"motor_names": list(self.robot.MOTORS.keys()),
-					"calib_mode": [CalibrationMode.DEGREE.name] * len(self.robot.MOTORS),
-					"drive_mode": [0] * len(self.robot.MOTORS),
-					"homing_offset": [0] * len(self.robot.MOTORS),  # 모두 0으로 리셋
-				}
-				self.robot.motors_bus.set_calibration(calibration_data)
-				self._log("Default calibration applied!", "success")
-			except Exception as e:
-				self._log(f"Warning: Failed to update FeetechMotorsBus calibration: {e}", "warning")
-		
-		# 토크 재활성화
-		self.robot.enable_torque()
-		self._log("Torque re-enabled", "info")
-		
-		# 캘리브레이션 데이터 저장
-		from ..config import CALIBRATION_DIR
-		os.makedirs(CALIBRATION_DIR, exist_ok=True)
-		calib_file = os.path.join(CALIBRATION_DIR, "calibration.json")
-		self.save(calib_file)
-		self._log(f"Calibration saved to {calib_file}", "success")
-		
-		# 상태 초기화
-		self.calibration_current_step = 0
-		self.joint_min_positions = [None] * 6
-		self.joint_max_positions = [None] * 6
-		self.current_joint_index = 0
-		
-		return (
-			"success",
-			"Calibration completed successfully! The robot is now calibrated and ready to use.\n\n"
-			"측정된 조인트 범위:\n"
-			+ "\n".join([
-				f"  - {self.robot.JOINT_NAMES[i] if hasattr(self.robot, 'JOINT_NAMES') else f'Joint {i+1}'}: "
-				f"{self.data['joint_ranges']['min'][i]:.1f}° ~ {self.data['joint_ranges']['max'][i]:.1f}° "
-				f"(중간: {self.data['joint_ranges']['middle'][i]:.1f}°)"
-				for i in range(6)
-			])
-		)
+			# 측정된 범위를 데이터에 저장
+			self.data["joint_ranges"] = {
+				"min": [self.joint_min_positions[i] if self.joint_min_positions[i] is not None else -180 for i in range(6)],
+				"max": [self.joint_max_positions[i] if self.joint_max_positions[i] is not None else 180 for i in range(6)],
+				"middle": joint_middles
+			}
+			
+			# homing_offset은 사용하지 않음 (Feetech 모터는 -180° ~ +180° 지원)
+			
+			# SO-100 어댑터의 캘리브레이션 오프셋 업데이트
+			if hasattr(self.robot, 'calibration_offsets'):
+				self.robot.calibration_offsets = self.data["joint_offsets"]
+				self._log("Calibration offsets applied to robot adapter", "success")
+			
+			# 조인트 제한값 업데이트 (측정된 범위를 제한값으로 사용)
+			if hasattr(self.robot, 'joint_limits'):
+				new_limits = []
+				for i in range(6):
+					min_val = self.joint_min_positions[i] if self.joint_min_positions[i] is not None else -180
+					max_val = self.joint_max_positions[i] if self.joint_max_positions[i] is not None else 180
+					new_limits.append([min_val, max_val])
+				self.robot.joint_limits = new_limits
+				self._log(f"Joint limits updated from calibration: {new_limits}", "success")
+			
+			# FeetechMotorsBus 기본 캘리브레이션 사용 (homing_offset = 0)
+			if hasattr(self.robot, 'motors_bus') and self.robot.motors_bus:
+				try:
+					from .motors.feetech import CalibrationMode
+					
+					self._log("Using default calibration (no homing_offset)", "info")
+					
+					# 기본 캘리브레이션 데이터 설정
+					calibration_data = {
+						"motor_names": list(self.robot.MOTORS.keys()),
+						"calib_mode": [CalibrationMode.DEGREE.name] * len(self.robot.MOTORS),
+						"drive_mode": [0] * len(self.robot.MOTORS),
+						"homing_offset": [0] * len(self.robot.MOTORS),  # 모두 0으로 리셋
+					}
+					self.robot.motors_bus.set_calibration(calibration_data)
+					self._log("Default calibration applied!", "success")
+				except Exception as e:
+					self._log(f"Warning: Failed to update FeetechMotorsBus calibration: {e}", "warning")
+			
+			# 토크 재활성화
+			self.robot.enable_torque()
+			self._log("Torque re-enabled", "info")
+			
+			# 캘리브레이션 데이터 저장
+			from ..config import CALIBRATION_DIR
+			import os
+			os.makedirs(CALIBRATION_DIR, exist_ok=True)
+			calib_file = os.path.join(CALIBRATION_DIR, "calibration.json")
+			self.save(calib_file)
+			self._log(f"Calibration saved to {calib_file}", "success")
+			
+			# 상태 초기화
+			self.calibration_current_step = 0
+			self.joint_min_positions = [None] * 6
+			self.joint_max_positions = [None] * 6
+			self.current_joint_index = 0
+			
+			return (
+				"success",
+				"Calibration completed successfully! The robot is now calibrated and ready to use.\n\n"
+				"측정된 조인트 범위:\n"
+				+ "\n".join([
+					f"  - {self.robot.JOINT_NAMES[i] if hasattr(self.robot, 'JOINT_NAMES') else f'Joint {i+1}'}: "
+					f"{self.data['joint_ranges']['min'][i]:.1f}° ~ {self.data['joint_ranges']['max'][i]:.1f}° "
+					f"(중간: {self.data['joint_ranges']['middle'][i]:.1f}°)"
+					for i in range(6)
+				])
+			)
 		
 		return ("error", "Unknown calibration step")
-	
+
 	def update_realtime_positions(self) -> Dict[str, Any]:
 		"""
 		실시간으로 조인트 위치를 업데이트하고 min/max 추적
@@ -423,45 +430,39 @@ class CalibrationManager:
 		}
 	
 	def record_joint_min(self) -> bool:
-		"""현재 조인트의 최소 위치 기록 (실시간 추적된 최소값 또는 현재 위치)"""
+		"""현재 조인트의 최소 위치 기록 (버튼을 누른 순간의 현재 위치)"""
 		if self.calibration_current_step != 2:
 			return False
 		
 		if self.current_joint_index < 6:
-			# 실시간 추적된 최소값이 있으면 사용, 없으면 현재 위치 사용
-			if self.realtime_min_positions[self.current_joint_index] is not None:
-				recorded_value = self.realtime_min_positions[self.current_joint_index]
-			else:
-				state = self.robot.get_state()
-				current_joints = state.get("joint_positions", [0.0] * 6)
-				recorded_value = current_joints[self.current_joint_index]
+			# 항상 현재 위치를 읽어서 기록 (추적된 값 사용하지 않음)
+			state = self.robot.get_state()
+			current_joints = state.get("joint_positions", [0.0] * 6)
+			recorded_value = current_joints[self.current_joint_index]
 			
 			self.joint_min_positions[self.current_joint_index] = recorded_value
 			joint_name = self.robot.JOINT_NAMES[self.current_joint_index] if hasattr(self.robot, 'JOINT_NAMES') else f"Joint {self.current_joint_index + 1}"
-			self._log(f"{joint_name} minimum position recorded: {recorded_value:.2f}°", "info")
+			self._log(f"{joint_name} minimum position recorded: {recorded_value:.2f}° (current position)", "info")
 			return True
 		
 		return False
 	
 	def record_joint_max(self) -> bool:
-		"""현재 조인트의 최대 위치 기록 (실시간 추적된 최대값 또는 현재 위치)"""
+		"""현재 조인트의 최대 위치 기록 (버튼을 누른 순간의 현재 위치)"""
 		if self.calibration_current_step != 2:
 			return False
 		
 		if self.current_joint_index >= 6:
 			return False
 		
-		# 실시간 추적된 최대값이 있으면 사용, 없으면 현재 위치 사용
-		if self.realtime_max_positions[self.current_joint_index] is not None:
-			recorded_value = self.realtime_max_positions[self.current_joint_index]
-		else:
-			state = self.robot.get_state()
-			current_joints = state.get("joint_positions", [0.0] * 6)
-			recorded_value = current_joints[self.current_joint_index]
+		# 항상 현재 위치를 읽어서 기록 (추적된 값 사용하지 않음)
+		state = self.robot.get_state()
+		current_joints = state.get("joint_positions", [0.0] * 6)
+		recorded_value = current_joints[self.current_joint_index]
 		
 		self.joint_max_positions[self.current_joint_index] = recorded_value
 		joint_name = self.robot.JOINT_NAMES[self.current_joint_index] if hasattr(self.robot, 'JOINT_NAMES') else f"Joint {self.current_joint_index + 1}"
-		self._log(f"{joint_name} maximum position recorded: {recorded_value:.2f}°", "info")
+		self._log(f"{joint_name} maximum position recorded: {recorded_value:.2f}° (current position)", "info")
 		
 		# 최소/최대 모두 기록되었으면 다음 조인트로
 		if self.joint_min_positions[self.current_joint_index] is not None:

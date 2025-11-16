@@ -315,13 +315,151 @@
 			font-size: 13px;
 		}
 
-		.joint-value {
-			font-family: 'Courier New', monospace;
-			color: var(--accent);
-			font-weight: 600;
-		}
+	.joint-value {
+		font-family: 'Courier New', monospace;
+		color: var(--accent);
+		font-weight: 600;
+	}
 
-		/* 로그 패널 (오른쪽 고정) */
+	/* 제어 방식 선택 탭 */
+	.control-tabs {
+		display: flex;
+		gap: 8px;
+		border-bottom: 2px solid var(--border);
+		margin-bottom: 0;
+	}
+
+	.control-tab {
+		flex: 1;
+		padding: 12px 20px;
+		background: transparent;
+		border: none;
+		border-bottom: 3px solid transparent;
+		cursor: pointer;
+		font-size: 14px;
+		font-weight: 500;
+		color: var(--text-secondary);
+		transition: all 0.2s;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 8px;
+	}
+
+	.control-tab:hover {
+		color: var(--text-primary);
+		background: var(--bg-secondary);
+	}
+
+	.control-tab.active {
+		color: var(--accent);
+		border-bottom-color: var(--accent);
+		font-weight: 600;
+	}
+
+	/* 슬라이더 스타일 */
+	.joint-sliders {
+		display: grid;
+		gap: 16px;
+		margin-top: 16px;
+	}
+
+	.slider-item {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+
+	.slider-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		font-size: 13px;
+	}
+
+	.slider-name {
+		font-weight: 600;
+		color: var(--text-primary);
+	}
+
+	.slider-value {
+		font-family: 'Courier New', monospace;
+		color: var(--accent);
+		font-weight: 600;
+	}
+
+	.slider-container {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+	}
+
+	.slider-label {
+		font-size: 11px;
+		color: var(--text-secondary);
+		min-width: 40px;
+		text-align: center;
+	}
+
+	.slider {
+		flex: 1;
+		-webkit-appearance: none;
+		appearance: none;
+		height: 6px;
+		background: var(--bg-secondary);
+		border-radius: 3px;
+		outline: none;
+		transition: background 0.2s;
+	}
+
+	.slider:hover {
+		background: var(--border);
+	}
+
+	.slider::-webkit-slider-thumb {
+		-webkit-appearance: none;
+		appearance: none;
+		width: 18px;
+		height: 18px;
+		background: var(--accent);
+		border-radius: 50%;
+		cursor: pointer;
+		transition: all 0.2s;
+		box-shadow: 0 2px 4px var(--shadow);
+	}
+
+	.slider::-webkit-slider-thumb:hover {
+		background: var(--accent-hover);
+		transform: scale(1.1);
+		box-shadow: 0 4px 8px var(--shadow-hover);
+	}
+
+	.slider::-webkit-slider-thumb:active {
+		transform: scale(0.95);
+	}
+
+	.slider::-moz-range-thumb {
+		width: 18px;
+		height: 18px;
+		background: var(--accent);
+		border: none;
+		border-radius: 50%;
+		cursor: pointer;
+		transition: all 0.2s;
+		box-shadow: 0 2px 4px var(--shadow);
+	}
+
+	.slider::-moz-range-thumb:hover {
+		background: var(--accent-hover);
+		transform: scale(1.1);
+		box-shadow: 0 4px 8px var(--shadow-hover);
+	}
+
+	.slider::-moz-range-thumb:active {
+		transform: scale(0.95);
+	}
+
+	/* 로그 패널 (오른쪽 고정) */
 		.logs-panel {
 			position: fixed;
 			right: 0;
@@ -1604,7 +1742,7 @@
 		<div class="content-section" id="section-control">
 			<div class="section-header">
 				<h2 data-i18n="section.control.title">Control</h2>
-				<p data-i18n="section.control.description">키보드로 로봇 제어</p>
+				<p data-i18n="section.control.description">로봇 제어 방법 선택</p>
 			</div>
 			<div class="grid">
 				<div class="card">
@@ -1620,7 +1758,21 @@
 						<span id="speed-value" style="font-weight: 600; color: var(--accent);">1.0x</span>
 					</div>
 				</div>
+				
+				<!-- 제어 방식 선택 탭 -->
 				<div class="card full-width">
+					<div class="control-tabs">
+						<button class="control-tab active" id="tab-keyboard" data-tab="keyboard">
+							⌨️ <span data-i18n="tab.keyboard_control">Keyboard Control</span>
+						</button>
+						<button class="control-tab" id="tab-slider" data-tab="slider">
+							🎚️ <span data-i18n="tab.slider_control">Slider Control</span> <span style="font-size: 11px; color: var(--text-secondary);">(Beta)</span>
+						</button>
+					</div>
+				</div>
+				
+				<!-- 키보드 제어 패널 -->
+				<div class="card full-width" id="panel-keyboard">
 					<div class="card-title" data-i18n="card.keyboard_control">Keyboard Control</div>
 					<p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 16px;" data-i18n="tip.keyboard_control">
 						브라우저에 포커스를 두고 키보드로 로봇을 제어하세요.
@@ -1637,6 +1789,26 @@
 						<!-- 키보드 힌트는 JavaScript에서 동적으로 생성 -->
 					</div>
 				</div>
+				
+				<!-- 슬라이더 제어 패널 -->
+				<div class="card full-width" id="panel-slider" style="display: none;">
+					<div class="card-title" data-i18n="card.slider_control">Slider Control <span style="font-size: 12px; color: var(--text-secondary);">(Beta)</span></div>
+					<p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 16px;" data-i18n="tip.slider_control">
+						슬라이더를 조절하여 각 조인트를 직접 제어하세요.
+					</p>
+					<div class="btn-group" style="margin-bottom: 16px;">
+						<button class="btn" id="start-slider-control-btn" data-i18n="btn.start_control">▶ Start Control</button>
+						<button class="btn btn-secondary" id="stop-slider-control-btn" disabled data-i18n="btn.stop_control">⏹ Stop Control</button>
+					</div>
+					<div id="slider-control-status" style="padding: 8px 12px; background: var(--bg-secondary); border-radius: 6px; margin-bottom: 16px; font-size: 13px;">
+						<span style="color: var(--text-secondary);" data-i18n="label.status">Status: </span>
+						<span id="slider-control-status-text" style="color: var(--text-secondary);" data-i18n="status.stopped">Stopped</span>
+					</div>
+					<div id="joint-sliders" class="joint-sliders">
+						<!-- 슬라이더는 JavaScript에서 동적으로 생성 -->
+					</div>
+				</div>
+				
 				<div class="card full-width">
 					<button class="btn estop-btn" id="estop-btn" data-i18n="btn.emergency_stop">EMERGENCY STOP</button>
 				</div>
