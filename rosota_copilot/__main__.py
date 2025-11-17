@@ -10,6 +10,108 @@ import threading
 import time
 from pathlib import Path
 
+# loguru 초기화 (PyInstaller 환경에서 포매터 오류 방지)
+# 패키지 import 전에 초기화하여 모든 모듈에서 일관된 설정 사용
+import os
+
+# PyInstaller로 빌드된 경우 sys.stderr가 None일 수 있으므로 처리
+if getattr(sys, 'frozen', False):
+    # windowed 모드에서 sys.stderr가 None인 경우 파일로 리디렉션
+    if sys.stderr is None:
+        try:
+            log_dir = Path(sys.executable).parent / 'logs'
+            log_dir.mkdir(exist_ok=True)
+            log_file = log_dir / 'app.log'
+            sys.stderr = open(str(log_file), 'w', encoding='utf-8')
+        except Exception:
+            # 파일 생성 실패 시 devnull로 리디렉션
+            sys.stderr = open(os.devnull, 'w')
+    
+    if sys.stdout is None:
+        try:
+            log_dir = Path(sys.executable).parent / 'logs'
+            log_dir.mkdir(exist_ok=True)
+            log_file = log_dir / 'app.log'
+            sys.stdout = open(str(log_file), 'w', encoding='utf-8')
+        except Exception:
+            sys.stdout = open(os.devnull, 'w')
+
+try:
+    from loguru import logger
+    
+    # 모든 기존 핸들러 제거 시도
+    try:
+        logger.remove()  # 기본 핸들러 제거
+    except (ValueError, AttributeError, TypeError):
+        # 핸들러가 없거나 이미 제거된 경우 무시
+        pass
+    
+    # 출력 스트림 결정 (sys.stderr가 None이 아닌 경우에만 사용)
+    if sys.stderr is not None and not (hasattr(sys.stderr, 'closed') and sys.stderr.closed):
+        # 간단한 포매터로 새 핸들러 추가
+        logger.add(
+            sys.stderr,
+            format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}",
+            level="INFO",
+            colorize=False,  # 색상 비활성화로 추가 오류 방지
+            enqueue=False    # 큐 비활성화로 추가 오류 방지
+        )
+    else:
+        # sys.stderr를 사용할 수 없는 경우 파일로 로깅
+        try:
+            if getattr(sys, 'frozen', False):
+                log_dir = Path(sys.executable).parent / 'logs'
+            else:
+                try:
+                    log_dir = Path(__file__).parent / 'logs'
+                except NameError:
+                    # __file__이 없는 경우 현재 작업 디렉토리 사용
+                    log_dir = Path.cwd() / 'logs'
+            log_dir.mkdir(exist_ok=True)
+            log_file = log_dir / 'app.log'
+            logger.add(
+                str(log_file),
+                format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}",
+                level="INFO",
+                rotation="10 MB",
+                retention="7 days"
+            )
+        except Exception:
+            # 파일 로깅도 실패하면 devnull로
+            logger.add(
+                os.devnull,
+                format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}",
+                level="INFO"
+            )
+except Exception as e:
+    # loguru 초기화 실패 시에도 계속 진행
+    # 표준 logging으로 대체
+    import logging
+    try:
+        if getattr(sys, 'frozen', False):
+            log_dir = Path(sys.executable).parent / 'logs'
+        else:
+            try:
+                log_dir = Path(__file__).parent / 'logs'
+            except NameError:
+                # __file__이 없는 경우 현재 작업 디렉토리 사용
+                log_dir = Path.cwd() / 'logs'
+        log_dir.mkdir(exist_ok=True)
+        log_file = log_dir / 'app.log'
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s | %(levelname)-8s | %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S',
+            handlers=[logging.FileHandler(str(log_file), encoding='utf-8')]
+        )
+    except Exception:
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s | %(levelname)-8s | %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
+    # print는 사용하지 않음 (sys.stdout이 None일 수 있음)
+
 # 패키징된 경우 (PyInstaller 또는 py2app) 리소스 경로 조정
 if getattr(sys, 'frozen', False):
     # PyInstaller로 패키징된 경우
