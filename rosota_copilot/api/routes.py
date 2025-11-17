@@ -9,6 +9,9 @@ import serial.tools.list_ports
 
 api_router = APIRouter()
 
+# 전역 변수로 종료 플래그 관리
+_shutdown_requested = False
+
 
 class ConnectRequest(BaseModel):
 	port: Optional[str] = None
@@ -19,6 +22,28 @@ class ConnectRequest(BaseModel):
 @api_router.get("/health")
 async def health():
 	return {"ok": True, "service": "rosota-copilot"}
+
+
+@api_router.post("/quit")
+async def quit_app(request: Request):
+	"""앱 종료 요청"""
+	global _shutdown_requested
+	_shutdown_requested = True
+	# 서버 종료는 별도 스레드에서 처리
+	import threading
+	import os
+	def shutdown_server():
+		import time
+		time.sleep(0.5)  # 응답 전송 대기
+		# uvicorn 서버 종료
+		try:
+			# FastAPI 앱의 lifespan 이벤트를 통해 종료
+			# 또는 직접 프로세스 종료
+			os._exit(0)
+		except:
+			os._exit(0)
+	threading.Thread(target=shutdown_server, daemon=True).start()
+	return {"ok": True, "message": "앱을 종료합니다."}
 
 
 @api_router.post("/connect")

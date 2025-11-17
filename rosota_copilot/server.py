@@ -1,6 +1,8 @@
 import os
 import asyncio
 import socketio
+from socketio.async_server import AsyncServer
+from socketio.asgi import ASGIApp
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -68,8 +70,14 @@ def create_app() -> FastAPI:
 	app.include_router(api_router, prefix="/api")
 
 	# Static & templates
-	static_dir = os.path.join(os.path.dirname(__file__), "static")
-	templates_dir = os.path.join(os.path.dirname(__file__), "templates")
+	# PyInstaller로 패키징된 경우 환경 변수에서 경로 가져오기
+	if os.environ.get('ROSOTA_STATIC_DIR'):
+		static_dir = os.environ['ROSOTA_STATIC_DIR']
+		templates_dir = os.environ.get('ROSOTA_TEMPLATES_DIR', 
+		                              os.path.join(os.path.dirname(__file__), "templates"))
+	else:
+		static_dir = os.path.join(os.path.dirname(__file__), "static")
+		templates_dir = os.path.join(os.path.dirname(__file__), "templates")
 	app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 	# Share instances via app.state
@@ -82,6 +90,9 @@ def create_app() -> FastAPI:
 	@app.get("/", response_class=HTMLResponse)
 	async def index():
 		index_path = os.path.join(templates_dir, "index.html")
+		if not os.path.exists(index_path):
+			# PyInstaller로 패키징된 경우 대체 경로 시도
+			index_path = os.path.join(os.path.dirname(__file__), "templates", "index.html")
 		with open(index_path, "r", encoding="utf-8") as f:
 			return HTMLResponse(f.read())
 
@@ -89,8 +100,8 @@ def create_app() -> FastAPI:
 
 
 # Socket.IO (ASGI)
-sio = socketio.AsyncServer(cors_allowed_origins="*", async_mode="asgi")
-socket_app = socketio.ASGIApp(sio)
+sio = AsyncServer(cors_allowed_origins="*", async_mode="asgi")
+socket_app = ASGIApp(sio)
 
 
 async def state_update_loop():

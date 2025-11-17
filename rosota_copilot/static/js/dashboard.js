@@ -129,6 +129,7 @@
 			"btn.connect": "연결",
 			"btn.disconnect": "연결 해제",
 			"btn.refresh": "🔄",
+			"btn.quit_app": "앱 종료",
 			"btn.start_calibration": "▶ 캘리브레이션 시작",
 			"btn.next_step": "다음 단계 →",
 			"btn.cancel": "취소",
@@ -246,6 +247,7 @@
 			"btn.connect": "Connect",
 			"btn.disconnect": "Disconnect",
 			"btn.refresh": "🔄",
+			"btn.quit_app": "Quit App",
 			"btn.start_calibration": "▶ Start Calibration",
 			"btn.next_step": "Next Step →",
 			"btn.cancel": "Cancel",
@@ -365,6 +367,36 @@
 			log("Logs cleared", "info");
 		}
 	});
+	
+	// 앱 종료 버튼
+	const quitAppBtn = document.getElementById("quit-app-btn");
+	if (quitAppBtn) {
+		quitAppBtn.addEventListener("click", async () => {
+			if (!confirm("앱을 종료하시겠습니까?")) {
+				return;
+			}
+			try {
+				quitAppBtn.disabled = true;
+				quitAppBtn.textContent = "종료 중...";
+				const response = await fetch("/api/quit", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" }
+				});
+				const data = await response.json();
+				if (data.ok) {
+					log("앱을 종료합니다...", "info");
+					// 서버가 종료되면 페이지가 닫힘
+					setTimeout(() => {
+						window.close();
+					}, 1000);
+				}
+			} catch (error) {
+				log(`종료 오류: ${error.message}`, "error");
+				quitAppBtn.disabled = false;
+				quitAppBtn.textContent = "앱 종료";
+			}
+		});
+	}
 	
 	toggleLogsBtn?.addEventListener("click", () => {
 		autoScrollEnabled = !autoScrollEnabled;
